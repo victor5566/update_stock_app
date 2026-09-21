@@ -1,0 +1,285 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --border: #d9dde3;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  padding: 24px 32px 8px;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+#lang-switch {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+main {
+  padding: 16px 32px 48px;
+  display: grid;
+  gap: 24px;
+  max-width: 960px;
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.form-section h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+#stock-form,
+#rename-form,
+#symbol-form,
+#delete-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px 16px;
+  align-items: end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+#stock-form label,
+#rename-form label,
+#symbol-form label,
+#delete-form label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+#stock-form input,
+#stock-form select,
+#rename-form input,
+#symbol-form input,
+#delete-form input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+#rename-form input:disabled,
+#symbol-form input:disabled,
+#delete-form input:disabled {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#submit-btn {
+  background: var(--accent);
+  color: white;
+}
+
+#submit-btn:hover {
+  background: var(--accent-hover);
+}
+
+#cancel-btn,
+#rename-clear-btn,
+#symbol-clear-btn,
+#delete-clear-btn {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.error {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
+.list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.list-toolbar h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.toolbar-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-controls input,
+.toolbar-controls select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.row-actions button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.btn-edit {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #3730a3;
+}
+
+.btn-delete {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+.btn-delete:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.pagination button {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.pagination button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.page-indicator {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.empty-state {
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 0 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --border: #2d323c;
+    --text: #e6e8eb;
+    --muted: #9aa3af;
+  }
+  .btn-edit {
+    background: #1e2540;
+    border-color: #3346a3;
+    color: #c7d2fe;
+  }
+  .btn-delete {
+    background: #3a1d1d;
+    border-color: #7f1d1d;
+    color: #fca5a5;
+  }
+}
