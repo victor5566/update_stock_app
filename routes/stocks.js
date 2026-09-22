@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db');
+const { applyStockUpdate } = require('../lib/applyStockUpdate');
 
 const router = express.Router();
 
@@ -116,64 +117,23 @@ router.put('/:id', async (req, res, next) => {
     return res.status(400).json({ errors });
   }
 
-  const fields = [];
-  const params = [];
+  const fields = {};
+  if (req.body.stock_symbol !== undefined) fields.stock_symbol = req.body.stock_symbol.trim().toUpperCase();
+  if (req.body.company_name !== undefined) fields.company_name = req.body.company_name.trim();
+  if (req.body.trading_market !== undefined) fields.trading_market = req.body.trading_market;
 
-  if (req.body.stock_symbol !== undefined) {
-    params.push(req.body.stock_symbol.trim().toUpperCase());
-    fields.push(`stock_symbol = $${params.length}`);
-  }
-  if (req.body.company_name !== undefined) {
-    params.push(req.body.company_name.trim());
-    fields.push(`company_name = $${params.length}`);
-  }
-  if (req.body.trading_market !== undefined) {
-    params.push(req.body.trading_market);
-    fields.push(`trading_market = $${params.length}`);
-  }
-
-  if (!fields.length) {
+  if (!Object.keys(fields).length) {
     return res.status(400).json({ errors: ['no fields to update'] });
   }
-
-  fields.push('updated_at = now()');
-  params.push(id);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const before = await client.query(
-      'SELECT company_name, stock_symbol FROM stocks WHERE id = $1 FOR UPDATE',
-      [id]
-    );
-    if (!before.rows.length) {
+    const updated = await applyStockUpdate(client, id, fields);
+    if (!updated) {
       await client.query('ROLLBACK');
       return res.status(404).json({ errors: ['stock not found'] });
-    }
-
-    const result = await client.query(
-      `UPDATE stocks SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
-      params
-    );
-    const updated = result.rows[0];
-
-    const newCompanyName = req.body.company_name !== undefined ? req.body.company_name.trim() : undefined;
-    if (newCompanyName !== undefined && newCompanyName !== before.rows[0].company_name) {
-      await client.query(
-        `INSERT INTO company_name_history (stock_id, stock_symbol, old_company_name, new_company_name)
-         VALUES ($1, $2, $3, $4)`,
-        [updated.id, updated.stock_symbol, before.rows[0].company_name, newCompanyName]
-      );
-    }
-
-    const newStockSymbol = req.body.stock_symbol !== undefined ? req.body.stock_symbol.trim().toUpperCase() : undefined;
-    if (newStockSymbol !== undefined && newStockSymbol !== before.rows[0].stock_symbol) {
-      await client.query(
-        `INSERT INTO stock_symbol_history (stock_id, company_name, old_stock_symbol, new_stock_symbol)
-         VALUES ($1, $2, $3, $4)`,
-        [updated.id, updated.company_name, before.rows[0].stock_symbol, newStockSymbol]
-      );
     }
 
     await client.query('COMMIT');
