@@ -19,8 +19,7 @@ router.get('/', async (req, res, next) => {
     const result = await pool.query(
       `SELECT id, stock_id, stock_symbol, old_company_name, new_company_name, changed_at
        FROM company_name_history ${where}
-       ORDER BY changed_at DESC
-       LIMIT 200`,
+       ORDER BY changed_at DESC`,
       params
     );
     res.json(result.rows);

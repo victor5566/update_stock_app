@@ -173,6 +173,9 @@ const renameError = document.getElementById('rename-error');
 
 const historyTableBody = document.getElementById('history-table-body');
 const historyEmptyState = document.getElementById('history-empty-state');
+const historyPrevPageBtn = document.getElementById('history-prev-page-btn');
+const historyNextPageBtn = document.getElementById('history-next-page-btn');
+const historyPageIndicator = document.getElementById('history-page-indicator');
 
 const symbolForm = document.getElementById('symbol-form');
 const symbolLookupInput = document.getElementById('symbol-lookup');
@@ -187,9 +190,15 @@ const stockDatalist = document.getElementById('stock-datalist');
 
 const symbolHistoryTableBody = document.getElementById('symbol-history-table-body');
 const symbolHistoryEmptyState = document.getElementById('symbol-history-empty-state');
+const symbolHistoryPrevPageBtn = document.getElementById('symbol-history-prev-page-btn');
+const symbolHistoryNextPageBtn = document.getElementById('symbol-history-next-page-btn');
+const symbolHistoryPageIndicator = document.getElementById('symbol-history-page-indicator');
 
 const manualAddLogTableBody = document.getElementById('manual-add-log-table-body');
 const manualAddLogEmptyState = document.getElementById('manual-add-log-empty-state');
+const manualAddLogPrevPageBtn = document.getElementById('manual-add-log-prev-page-btn');
+const manualAddLogNextPageBtn = document.getElementById('manual-add-log-next-page-btn');
+const manualAddLogPageIndicator = document.getElementById('manual-add-log-page-indicator');
 
 const removalCandidatesTableBody = document.getElementById('removal-candidates-table-body');
 const removalCandidatesEmptyState = document.getElementById('removal-candidates-empty-state');
@@ -215,8 +224,11 @@ const deletionPageIndicator = document.getElementById('deletion-page-indicator')
 let renameTargetStock = null;
 let symbolTargetStock = null;
 let lastHistory = [];
+let historyPage = 1;
 let lastSymbolHistory = [];
+let symbolHistoryPage = 1;
 let lastManualAddLog = [];
+let manualAddLogPage = 1;
 let lastRemovalCandidates = [];
 let removalPage = 1;
 let lastDeletionLog = [];
@@ -419,6 +431,7 @@ async function lookupRenameSymbol() {
 async function fetchHistory() {
   const res = await fetch('/api/company-name-history');
   lastHistory = await res.json();
+  historyPage = 1;
   renderHistory(lastHistory);
 }
 
@@ -426,7 +439,13 @@ function renderHistory(history) {
   historyTableBody.innerHTML = '';
   historyEmptyState.hidden = history.length > 0;
 
-  for (const entry of history) {
+  const totalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
+  historyPage = Math.min(Math.max(1, historyPage), totalPages);
+
+  const start = (historyPage - 1) * PAGE_SIZE;
+  const pageItems = history.slice(start, start + PAGE_SIZE);
+
+  for (const entry of pageItems) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(entry.stock_symbol)}</td>
@@ -436,7 +455,21 @@ function renderHistory(history) {
     `;
     historyTableBody.appendChild(tr);
   }
+
+  historyPageIndicator.textContent = t('pageIndicator')(historyPage, totalPages);
+  historyPrevPageBtn.disabled = historyPage <= 1;
+  historyNextPageBtn.disabled = historyPage >= totalPages;
 }
+
+historyPrevPageBtn.addEventListener('click', () => {
+  historyPage -= 1;
+  renderHistory(lastHistory);
+});
+
+historyNextPageBtn.addEventListener('click', () => {
+  historyPage += 1;
+  renderHistory(lastHistory);
+});
 
 renameSymbolInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -531,6 +564,7 @@ async function lookupSymbol() {
 async function fetchSymbolHistory() {
   const res = await fetch('/api/stock-symbol-history');
   lastSymbolHistory = await res.json();
+  symbolHistoryPage = 1;
   renderSymbolHistory(lastSymbolHistory);
 }
 
@@ -538,7 +572,13 @@ function renderSymbolHistory(history) {
   symbolHistoryTableBody.innerHTML = '';
   symbolHistoryEmptyState.hidden = history.length > 0;
 
-  for (const entry of history) {
+  const totalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
+  symbolHistoryPage = Math.min(Math.max(1, symbolHistoryPage), totalPages);
+
+  const start = (symbolHistoryPage - 1) * PAGE_SIZE;
+  const pageItems = history.slice(start, start + PAGE_SIZE);
+
+  for (const entry of pageItems) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(entry.company_name)}</td>
@@ -548,11 +588,26 @@ function renderSymbolHistory(history) {
     `;
     symbolHistoryTableBody.appendChild(tr);
   }
+
+  symbolHistoryPageIndicator.textContent = t('pageIndicator')(symbolHistoryPage, totalPages);
+  symbolHistoryPrevPageBtn.disabled = symbolHistoryPage <= 1;
+  symbolHistoryNextPageBtn.disabled = symbolHistoryPage >= totalPages;
 }
+
+symbolHistoryPrevPageBtn.addEventListener('click', () => {
+  symbolHistoryPage -= 1;
+  renderSymbolHistory(lastSymbolHistory);
+});
+
+symbolHistoryNextPageBtn.addEventListener('click', () => {
+  symbolHistoryPage += 1;
+  renderSymbolHistory(lastSymbolHistory);
+});
 
 async function fetchManualAddLog() {
   const res = await fetch(`${API_BASE}?source=manual`);
   lastManualAddLog = await res.json();
+  manualAddLogPage = 1;
   renderManualAddLog(lastManualAddLog);
 }
 
@@ -560,7 +615,13 @@ function renderManualAddLog(log) {
   manualAddLogTableBody.innerHTML = '';
   manualAddLogEmptyState.hidden = log.length > 0;
 
-  for (const stock of log) {
+  const totalPages = Math.max(1, Math.ceil(log.length / PAGE_SIZE));
+  manualAddLogPage = Math.min(Math.max(1, manualAddLogPage), totalPages);
+
+  const start = (manualAddLogPage - 1) * PAGE_SIZE;
+  const pageItems = log.slice(start, start + PAGE_SIZE);
+
+  for (const stock of pageItems) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(stock.stock_symbol)}</td>
@@ -570,7 +631,21 @@ function renderManualAddLog(log) {
     `;
     manualAddLogTableBody.appendChild(tr);
   }
+
+  manualAddLogPageIndicator.textContent = t('pageIndicator')(manualAddLogPage, totalPages);
+  manualAddLogPrevPageBtn.disabled = manualAddLogPage <= 1;
+  manualAddLogNextPageBtn.disabled = manualAddLogPage >= totalPages;
 }
+
+manualAddLogPrevPageBtn.addEventListener('click', () => {
+  manualAddLogPage -= 1;
+  renderManualAddLog(lastManualAddLog);
+});
+
+manualAddLogNextPageBtn.addEventListener('click', () => {
+  manualAddLogPage += 1;
+  renderManualAddLog(lastManualAddLog);
+});
 
 function removalReasonLabel(reason) {
   if (reason === 'not_found_on_yahoo') return t('removalReasonNotFound');
