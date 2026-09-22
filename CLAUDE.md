@@ -28,6 +28,10 @@ psql -h localhost -U <role> -d <db> -f sql/schema.sql
 
 PostgreSQL runs locally in WSL. The app connects over TCP (`localhost:5432`) with password auth via a dedicated role, not the `postgres` superuser and not peer auth — connection settings come from `.env` (see `.env.example`), read by `db.js`.
 
+### Git
+
+The repo's `origin` is https://github.com/victor5566/update_stock_app (branch `main`). Pushes are done from a Windows-side shell (PowerShell), not WSL — the WSL environment has no GitHub credentials configured, but Windows git already has a cached credential for this account via Git Credential Manager.
+
 ## Architecture
 
 **`stocks`** is the core table (`stock_symbol` UNIQUE, `company_name`, `trading_market` CHECK'd to the 4 markets, `source` CHECK'd to `manual | yahoo | excel_import | nasdaq_trader`). Five auxiliary tables hang off it:
@@ -35,11 +39,11 @@ PostgreSQL runs locally in WSL. The app connects over TCP (`localhost:5432`) wit
 - `stock_update_candidates` / `stock_removal_candidates` — a snapshot, not a log: `scripts/check-stock-status.js` `TRUNCATE`s and fully repopulates both on every run. Also `ON DELETE CASCADE`, so deleting a stock that happens to be a removal candidate silently drops it from that list too.
 - `stock_deletion_log` — the one exception: **no FK to `stocks`**, by design, since these rows must outlive the stock they describe.
 
-**Two transactional diff-and-log mechanisms are the core non-obvious pattern**, both in `routes/stocks.js`:
-- `PUT /api/stocks/:id` — `SELECT ... FOR UPDATE`s the current row, applies the update, diffs old vs. new `company_name`/`stock_symbol`, and conditionally inserts into the two history tables.
-- `DELETE /api/stocks/:id` — deletes the row (`RETURNING` its data) and inserts that data into `stock_deletion_log`, in the same transaction.
+**Two transactional diff-and-log mechanisms are the core non-obvious pattern**:
+- **Updates**: `lib/applyStockUpdate.js` holds the shared core — `SELECT ... FOR UPDATE`s the current row, applies the update, diffs old vs. new `company_name`/`stock_symbol`, and conditionally inserts into the two history tables. It expects to run inside a transaction the *caller* owns (`BEGIN`/`COMMIT`/`ROLLBACK` + `client.connect`/`release`). Two callers use it: `PUT /api/stocks/:id` (one stock, from the web form) and `scripts/apply-update-candidates.js` (bulk, one candidate row at a time from `stock_update_candidates`). If you add a third way to update a stock, call this instead of re-inlining the diff logic.
+- **Deletes**: `DELETE /api/stocks/:id` (`routes/stocks.js`) deletes the row (`RETURNING` its data) and inserts that data into `stock_deletion_log`, in the same transaction. Not yet extracted to `lib/` since there's only one caller.
 
-Any future change to how stocks are updated or deleted needs to preserve these steps, since they're the only thing populating the history/log tables.
+Any future change to how stocks are updated or deleted needs to preserve these steps, since they're the only thing populating the history/log tables. Both paths sanitize text through a `Buffer.from(str,'utf8').toString('utf8')` round-trip before writing history rows — accented company names (Latin American ADRs, etc.) have tripped a node-postgres encoding edge case here before.
 
 **`source` tracks provenance**, not just for record-keeping: the "manual add log" UI section is literally `GET /api/stocks?source=manual`. Only `POST /api/stocks` (the web form) sets `source='manual'`; each of the import scripts stamps its own source value. If you add a new way to insert stocks, make sure it sets `source` correctly or it will silently pollute the manual-add log.
 
@@ -56,10 +60,12 @@ Any future change to how stocks are updated or deleted needs to preserve these s
 - `import-from-excel.js <path.xlsx>` — bulk import from a spreadsheet (header aliases are matched loosely; later duplicate rows for the same symbol win).
 - `import-nasdaq-trader.js` — downloads NASDAQ Trader's official listing files and bulk-inserts all NASDAQ/NYSE/AMEX securities, cleaning names via `cleanSecurityName` on the way in. Does **not** cover OTC (that data isn't in an exchange-listing feed); OTC coverage currently comes only from Excel imports.
 - `clean-company-names.js` — one-off backfill that re-runs `cleanSecurityName` over every existing row and updates `company_name` where it changed. Does **not** touch `company_name_history` — this is a data-quality fix, not a rename, so it shouldn't show up as one.
-- `check-stock-status.js` — batches all DB symbols through `yf.quote()` (200 at a time) and rebuilds the two candidate tables. Two gotchas if touching this: pass `{}, { validateResult: false }` as `yf.quote()`'s 3rd arg, or one malformed instrument in a batch of 200 silently drops the entire batch; and sanitize returned text through a `Buffer.from(str,'utf8').toString('utf8')` round-trip before inserting, since Yahoo occasionally returns unpaired UTF-16 surrogates that Postgres rejects as invalid UTF-8. Re-run this after any bulk company-name cleanup, since messy names inflate false-positive `company_name_mismatch` candidates.
+- `check-stock-status.js` — batches all DB symbols through `yf.quote()` (200 at a time) and rebuilds the two candidate tables (`TRUNCATE` + full repopulate, so it's always a fresh snapshot, not additive). Pass `{}, { validateResult: false }` as `yf.quote()`'s 3rd arg, or one malformed instrument in a batch of 200 silently drops the entire batch. Re-run this after any bulk company-name cleanup, since messy names inflate false-positive `company_name_mismatch` candidates.
+- `apply-update-candidates.js` — reads every row out of `stock_update_candidates` and applies it to `stocks` via `applyStockUpdate` (so it still gets logged to history), then deletes the row it just applied. Only touches `stock_update_candidates`; `stock_removal_candidates` is intentionally left alone since deleting stocks is a separate, more consequential decision the UI leaves to a human.
+- `export-to-csv.js` — dumps the full `stocks` table to `exports/stocks.csv` (committed to the repo, not gitignored). Re-run and re-commit after any bulk data change if you want the export to stay current; nothing does this automatically.
 
 **Frontend** (`public/`) is a single `index.html` + `app.js`, no bundler/framework. Notable patterns to follow if extending it:
 - i18n is a `TRANSLATIONS` object (zh/en) applied via `data-i18n` / `data-i18n-placeholder` attributes and a `t()` lookup — not a library.
-- Each list section (main stock list, removal candidates, deletion log) paginates client-side with its own `PAGE_SIZE = 15` state/render functions, duplicated per-section rather than abstracted into a shared helper.
+- Every list section (stock list, company-name history, symbol history, manual-add log, removal candidates, deletion log — 6 total) paginates client-side at `PAGE_SIZE = 15`, each with its own page-state variable and render function, duplicated per-section rather than abstracted into a shared helper. The two history API endpoints used to `LIMIT 200`; that cap was removed once pagination existed, so don't re-add a server-side limit without also handling it client-side.
 - The three lookup-before-edit forms (rename, change-symbol, delete) each follow the same shape: a symbol input with datalist autocomplete, a "查詢/Lookup" button that `GET`s `by-symbol` and disables/enables the rest of the form, a "清空/Clear" button that calls that form's `reset*Form()`, and a submit that does the actual `PUT`/`DELETE`. Copy this shape rather than inventing a new one if adding a fourth.
 - Stock-symbol inputs use `class="uppercase"` (CSS `text-transform`, display-only) rather than mutating the input value on keystroke.

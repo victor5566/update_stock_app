@@ -28,6 +28,10 @@ psql -h localhost -U <role> -d <db> -f sql/schema.sql
 
 PostgreSQL 是在 WSL 本機執行。App 是透過 TCP（`localhost:5432`）用密碼驗證的專用帳號連線，不是用 `postgres` 超級使用者，也不是 peer 驗證——連線設定來自 `.env`（可參考 `.env.example`），由 `db.js` 讀取。
 
+### Git
+
+這個 repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `main`）。推送是在 Windows 端的 shell（PowerShell）執行，不是從 WSL——WSL 環境裡沒有設定 GitHub 登入資訊，但 Windows 端的 git 已經透過 Git Credential Manager 快取了這個帳號的憑證。
+
 ## 架構重點
 
 **`stocks`** 是核心資料表（`stock_symbol` 唯一、`company_name`、`trading_market` 限制在四種市場、`source` 限制在 `manual | yahoo | excel_import | nasdaq_trader`）。有五張輔助表：
@@ -35,11 +39,11 @@ PostgreSQL 是在 WSL 本機執行。App 是透過 TCP（`localhost:5432`）用�
 - `stock_update_candidates` / `stock_removal_candidates` ——這是「快照」不是「日誌」：`scripts/check-stock-status.js` 每次執行都會先 `TRUNCATE` 再整批重新寫入這兩張表。也是 `ON DELETE CASCADE`，所以如果刪除一支剛好在「移除候選清單」裡的股票，它會自動從清單消失。
 - `stock_deletion_log` ——唯一的例外：**刻意不設外鍵**，因為這張表的資料本來就是要在股票本身被刪除之後還留著。
 
-**兩個「比對並記錄」的交易邏輯是最重要、最不直覺的機制**，都在 `routes/stocks.js`：
-- `PUT /api/stocks/:id` ——先 `SELECT ... FOR UPDATE` 鎖定目前的資料列，執行更新，再比對更新前後的 `company_name`／`stock_symbol` 差異，視情況寫入前述兩張歷史表。
-- `DELETE /api/stocks/:id` ——刪除該筆資料（用 `RETURNING` 取回內容），並在同一個交易裡把內容寫進 `stock_deletion_log`。
+**兩個「比對並記錄」的交易邏輯是最重要、最不直覺的機制**：
+- **更新**：`lib/applyStockUpdate.js` 是共用的核心邏輯——先 `SELECT ... FOR UPDATE` 鎖定目前的資料列，執行更新，再比對更新前後的 `company_name`／`stock_symbol` 差異，視情況寫入前述兩張歷史表。它預期是在「呼叫端」自己開好的交易裡執行（呼叫端自己負責 `BEGIN`／`COMMIT`／`ROLLBACK` 跟 `client.connect`／`release`）。目前有兩個呼叫端在用：`PUT /api/stocks/:id`（網頁表單，一次一筆）跟 `scripts/apply-update-candidates.js`（批次套用，從 `stock_update_candidates` 一筆一筆處理）。之後如果要新增第三種更新股票的方式，請直接呼叫這個函式，不要重新寫一次比對邏輯。
+- **刪除**：`DELETE /api/stocks/:id`（`routes/stocks.js`）刪除該筆資料（用 `RETURNING` 取回內容），並在同一個交易裡把內容寫進 `stock_deletion_log`。目前只有一個呼叫端，所以還沒抽成 `lib/` 共用函式。
 
-之後如果要修改股票更新或刪除的邏輯，一定要保留這些步驟，因為歷史表／紀錄表的資料完全靠它們產生。
+之後如果要修改股票更新或刪除的邏輯，一定要保留這些步驟，因為歷史表／紀錄表的資料完全靠它們產生。兩條路徑寫入歷史表之前，都會把文字用 `Buffer.from(str,'utf8').toString('utf8')` 處理過一輪——帶重音符號的公司名稱（例如拉丁美洲的 ADR）之前就在這裡踩過 node-postgres 的編碼問題。
 
 **`source` 欄位是用來追蹤資料來源**，不只是留紀錄用：網頁上的「新增紀錄（手動輸入）」區塊，其實就是呼叫 `GET /api/stocks?source=manual`。只有 `POST /api/stocks`（網頁的新增表單）會把 `source` 設成 `'manual'`；各支匯入腳本各自會標記自己的來源值。之後如果新增其他寫入股票資料的方式，務必正確設定 `source`，否則會悄悄污染「手動新增紀錄」清單。
 
@@ -56,10 +60,12 @@ PostgreSQL 是在 WSL 本機執行。App 是透過 TCP（`localhost:5432`）用�
 - `import-from-excel.js <path.xlsx>` ——從 Excel 檔批次匯入（欄位標題用模糊比對辨識；同一代碼若出現多次，以較後面那筆為準）。
 - `import-nasdaq-trader.js` ——下載 NASDAQ Trader 官方上市清單，批次匯入所有 NASDAQ/NYSE/AMEX 股票，匯入時會先用 `cleanSecurityName` 把名稱清乾淨。**不含 OTC**（官方上市清單本來就不包含 OTC 資料）；目前 OTC 的資料只來自 Excel 匯入。
 - `clean-company-names.js` ——一次性的回填腳本，對資料庫裡每一筆現有資料重新跑一次 `cleanSecurityName`，名稱有變的就更新。**不會**寫入 `company_name_history`——這是資料品質修正，不是真正的改名，不應該被當成一次異動記錄下來。
-- `check-stock-status.js` ——把資料庫裡所有代碼分批（每批 200 筆）丟給 `yf.quote()` 查詢，並重建前述兩張候選清單表。之後如果要改這支腳本，注意兩個坑：呼叫 `yf.quote()` 時第三個參數要帶 `{}, { validateResult: false }`，否則一批 200 筆裡只要有一檔格式不符，整批都會被默默丟棄；另外，寫入資料庫前要把 Yahoo 回傳的文字用 `Buffer.from(str,'utf8').toString('utf8')` 處理過一輪，因為 Yahoo 偶爾會回傳不成對的 UTF-16 surrogate 字元，直接寫入會讓 Postgres 丟出無效編碼的錯誤。每次大規模清理公司名稱之後，建議重跑這支腳本——名稱髒亂會讓 `company_name_mismatch` 候選清單出現大量誤判。
+- `check-stock-status.js` ——把資料庫裡所有代碼分批（每批 200 筆）丟給 `yf.quote()` 查詢，並重建前述兩張候選清單表（每次都是先 `TRUNCATE` 再整批重新寫入，是「快照」不是累加）。呼叫 `yf.quote()` 時第三個參數要帶 `{}, { validateResult: false }`，否則一批 200 筆裡只要有一檔格式不符，整批都會被默默丟棄。每次大規模清理公司名稱之後，建議重跑這支腳本——名稱髒亂會讓 `company_name_mismatch` 候選清單出現大量誤判。
+- `apply-update-candidates.js` ——把 `stock_update_candidates` 裡的每一筆都透過 `applyStockUpdate` 套用回 `stocks` 表（所以還是會正常寫入歷史表），套用完就把該筆從候選表刪掉。只會動 `stock_update_candidates`；`stock_removal_candidates` 刻意不動，因為刪除股票是更嚴重的決定，網頁上就是留給人來判斷的。
+- `export-to-csv.js` ——把整個 `stocks` 表匯出成 `exports/stocks.csv`（有加進版本控制，沒有被 gitignore）。這個檔案不會自動更新，資料庫有大量異動之後，如果想讓匯出檔保持最新，要自己重跑並重新 commit。
 
 **前端**（`public/`）就是一個 `index.html` 加 `app.js`，沒有用 bundler 或框架。之後要擴充時，請遵循已經在用的幾個模式：
 - 多語系是用一個 `TRANSLATIONS` 物件（zh/en），透過 `data-i18n`／`data-i18n-placeholder` 屬性配合 `t()` 函式套用文字——不是用套件。
-- 每個列表區塊（股票列表、移除候選清單、刪除紀錄）都是各自獨立做前端分頁，各自維護自己的 `PAGE_SIZE = 15` 狀態跟渲染函式，沒有抽成共用的元件。
+- 每個列表區塊（股票列表、公司名稱異動記錄、股票代碼異動記錄、新增紀錄（手動輸入）、移除候選清單、已刪除股票紀錄——共 6 個）都是各自獨立做前端分頁，統一 `PAGE_SIZE = 15`，各自維護自己的分頁狀態跟渲染函式，沒有抽成共用的元件。這兩支歷史記錄的 API 以前有 `LIMIT 200`，加上分頁之後這個上限就拿掉了——之後不要在沒有同步處理前端分頁的情況下，又加回後端的筆數上限。
 - 「先查詢再操作」的三個表單（改名、改代碼、刪除）都遵循同一套結構：代碼輸入框配 datalist 自動完成、一個「查詢」按鈕會呼叫 `by-symbol` 並解鎖／鎖住表單其餘欄位、一個「清空」按鈕呼叫該表單自己的 `reset*Form()`、送出才真正執行 `PUT`／`DELETE`。之後如果要加第四個類似的表單，直接照抄這個結構就好，不用重新設計。
 - 股票代碼輸入框是用 `class="uppercase"`（CSS 的 `text-transform`，純顯示用）來呈現大寫，而不是在輸入時即時竄改輸入框的實際值。
