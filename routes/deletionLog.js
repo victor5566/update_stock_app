@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/', async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT id, stock_symbol, company_name, trading_market, deleted_at
+      `SELECT id, stock_symbol, company_name, exchange, deleted_at
        FROM stock_deletion_log
        ORDER BY deleted_at DESC`
     );

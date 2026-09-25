@@ -19,6 +19,7 @@
   </header>
 
   <datalist id="stock-datalist"></datalist>
+  <datalist id="exchange-datalist"></datalist>
 
   <main>
     <section class="form-section">
@@ -38,13 +39,7 @@
 
         <div class="field">
           <label for="trading-market" data-i18n="labelMarket">交易市場</label>
-          <select id="trading-market" required>
-            <option value="" disabled selected data-i18n="selectPlaceholder">請選擇</option>
-            <option value="NASDAQ">NASDAQ</option>
-            <option value="NYSE">NYSE</option>
-            <option value="AMEX">AMEX</option>
-            <option value="OTC">OTC</option>
-          </select>
+          <input type="text" id="trading-market" list="exchange-datalist" placeholder="NASDAQ" autocomplete="off" required />
         </div>
 
         <div class="form-actions">
@@ -108,13 +103,7 @@
         <h2 data-i18n="listTitle">股票列表</h2>
         <div class="toolbar-controls">
           <input type="search" id="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="搜尋代碼或公司名稱" />
-          <select id="market-filter">
-            <option value="" data-i18n="allMarkets">全部市場</option>
-            <option value="NASDAQ">NASDAQ</option>
-            <option value="NYSE">NYSE</option>
-            <option value="AMEX">AMEX</option>
-            <option value="OTC">OTC</option>
-          </select>
+          <input type="text" id="market-filter" list="exchange-datalist" data-i18n-placeholder="allMarkets" placeholder="全部市場" autocomplete="off" />
         </div>
       </div>
 

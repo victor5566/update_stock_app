@@ -25,7 +25,11 @@ function parseNasdaqListed(lines) {
     const cols = line.split('|');
     const [symbol, securityName, , testIssue, , , etf] = cols;
     if (testIssue === 'Y' || etf === 'Y') continue;
-    rows.push({ stock_symbol: symbol.trim().toUpperCase(), company_name: cleanSecurityName(securityName), trading_market: 'NASDAQ' });
+    rows.push({
+      stock_symbol: symbol.trim().toUpperCase(),
+      company_name: cleanSecurityName(securityName),
+      exchange: 'NASDAQ',
+    });
   }
   return rows;
 }
@@ -35,11 +39,15 @@ function parseOtherListed(lines) {
   for (const line of lines.slice(1)) {
     if (line.startsWith('File Creation Time')) continue;
     const cols = line.split('|');
-    const [actSymbol, securityName, exchange, , etf, , testIssue] = cols;
+    const [actSymbol, securityName, exchangeCode, , etf, , testIssue] = cols;
     if (testIssue === 'Y' || etf === 'Y') continue;
-    const trading_market = exchange === 'N' ? 'NYSE' : exchange === 'A' ? 'AMEX' : null;
-    if (!trading_market) continue;
-    rows.push({ stock_symbol: actSymbol.trim().toUpperCase(), company_name: cleanSecurityName(securityName), trading_market });
+    const exchange = exchangeCode === 'N' ? 'NYSE' : exchangeCode === 'A' ? 'AMEX' : null;
+    if (!exchange) continue;
+    rows.push({
+      stock_symbol: actSymbol.trim().toUpperCase(),
+      company_name: cleanSecurityName(securityName),
+      exchange,
+    });
   }
   return rows;
 }
@@ -73,11 +81,11 @@ async function main() {
     await client.query('BEGIN');
     for (const stock of stocks) {
       const result = await client.query(
-        `INSERT INTO stocks (stock_symbol, company_name, trading_market, source)
+        `INSERT INTO stocks (stock_symbol, company_name, exchange, source)
          VALUES ($1, $2, $3, 'nasdaq_trader')
          ON CONFLICT (stock_symbol) DO NOTHING
          RETURNING id`,
-        [stock.stock_symbol, stock.company_name, stock.trading_market]
+        [stock.stock_symbol, stock.company_name, stock.exchange]
       );
       if (result.rows.length) inserted++;
       else skippedExisting++;

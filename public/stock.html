@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title data-i18n="detailTitle">公司資訊</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <h1 id="page-heading">-</h1>
+      <select id="lang-switch" aria-label="Language">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <p class="subtitle"><a href="/" data-i18n="backToList">&larr; 返回股票列表</a></p>
+  </header>
+
+  <main>
+    <section id="not-found-section" class="form-section" hidden>
+      <p data-i18n="stockNotFound">找不到此股票代碼</p>
+    </section>
+
+    <section id="detail-section" class="form-section" hidden>
+      <dl class="detail-grid">
+        <dt data-i18n="labelSymbol">股票代碼</dt><dd id="detail-symbol"></dd>
+        <dt data-i18n="labelCompany">公司名稱</dt><dd id="detail-company-name"></dd>
+        <dt data-i18n="labelMarket">交易市場</dt><dd id="detail-exchange"></dd>
+        <dt data-i18n="labelCategory">類別</dt><dd id="detail-category"></dd>
+        <dt data-i18n="labelDelisted">已除牌</dt><dd id="detail-isdelisted"></dd>
+        <dt data-i18n="labelCusips">CUSIP</dt><dd id="detail-cusips"></dd>
+        <dt data-i18n="labelSector">產業別</dt><dd id="detail-sector"></dd>
+        <dt data-i18n="labelIndustry">細分產業</dt><dd id="detail-industry"></dd>
+        <dt data-i18n="labelCurrency">幣別</dt><dd id="detail-currency"></dd>
+        <dt data-i18n="labelLocation">公司所在地</dt><dd id="detail-company-location"></dd>
+        <dt data-i18n="labelUrl">官方網站</dt><dd id="detail-url"></dd>
+        <dt data-i18n="labelCeo">執行長</dt><dd id="detail-ceo"></dd>
+        <dt data-i18n="labelDescription">公司簡介</dt><dd id="detail-description" class="detail-description"></dd>
+      </dl>
+    </section>
+  </main>
+
+  <script src="stock.js"></script>
+</body>
+</html>

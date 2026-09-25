@@ -20,6 +20,13 @@ app.use('/api/stock-symbol-history', symbolHistoryRouter);
 app.use('/api/removal-candidates', removalCandidatesRouter);
 app.use('/api/stock-deletion-log', deletionLogRouter);
 
+// Per-stock detail page, e.g. /aapl - falls through here only when express.static above
+// found no matching file. The regex (single path segment, symbol-shaped) keeps this from
+// swallowing /api/* or any other multi-segment path.
+app.get(/^\/[A-Za-z.-]{1,50}$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'stock.html'));
+});
+
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ errors: ['internal server error'] });

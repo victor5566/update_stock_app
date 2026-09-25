@@ -153,6 +153,8 @@ const submitBtn = document.getElementById('submit-btn');
 const cancelBtn = document.getElementById('cancel-btn');
 const formError = document.getElementById('form-error');
 
+const exchangeDatalist = document.getElementById('exchange-datalist');
+
 const searchInput = document.getElementById('search-input');
 const marketFilter = document.getElementById('market-filter');
 const tableBody = document.getElementById('stock-table-body');
@@ -282,7 +284,7 @@ function enterEditMode(stock) {
   stockIdInput.value = stock.id;
   stockSymbolInput.value = stock.stock_symbol;
   companyNameInput.value = stock.company_name;
-  tradingMarketInput.value = stock.trading_market;
+  tradingMarketInput.value = stock.exchange;
   editingStock = stock;
   cancelBtn.hidden = false;
   updateFormHeader();
@@ -315,11 +317,20 @@ async function fetchAllStocksForDatalist() {
 
 function populateStockDatalist() {
   stockDatalist.innerHTML = '';
+  const exchanges = new Set();
   for (const stock of allStocks) {
     const option = document.createElement('option');
     option.value = stock.stock_symbol;
     option.label = stock.company_name;
     stockDatalist.appendChild(option);
+    if (stock.exchange) exchanges.add(stock.exchange);
+  }
+
+  exchangeDatalist.innerHTML = '';
+  for (const exchange of [...exchanges].sort()) {
+    const option = document.createElement('option');
+    option.value = exchange;
+    exchangeDatalist.appendChild(option);
   }
 }
 
@@ -337,9 +348,9 @@ function renderTable(stocks) {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td>${escapeHtml(stock.stock_symbol)}</td>
+      <td><a class="stock-symbol-link" href="/${encodeURIComponent(stock.stock_symbol.toLowerCase())}">${escapeHtml(stock.stock_symbol)}</a></td>
       <td>${escapeHtml(stock.company_name)}</td>
-      <td>${escapeHtml(stock.trading_market)}</td>
+      <td>${escapeHtml(stock.exchange)}</td>
       <td>${formatDate(stock.updated_at)}</td>
       <td class="row-actions">
         <button class="btn-edit" data-id="${stock.id}">${t('editBtn')}</button>
@@ -363,6 +374,7 @@ function escapeHtml(str) {
   div.textContent = str ?? '';
   return div.innerHTML;
 }
+
 
 async function deleteStock(stock) {
   const confirmed = confirm(t('confirmDelete')(stock.stock_symbol, stock.company_name));
@@ -626,7 +638,7 @@ function renderManualAddLog(log) {
     tr.innerHTML = `
       <td>${escapeHtml(stock.stock_symbol)}</td>
       <td>${escapeHtml(stock.company_name)}</td>
-      <td>${escapeHtml(stock.trading_market)}</td>
+      <td>${escapeHtml(stock.exchange)}</td>
       <td>${formatDate(stock.created_at)}</td>
     `;
     manualAddLogTableBody.appendChild(tr);
@@ -676,7 +688,7 @@ function renderRemovalCandidates(candidates) {
     tr.innerHTML = `
       <td>${escapeHtml(c.stock_symbol)}</td>
       <td>${escapeHtml(c.company_name)}</td>
-      <td>${escapeHtml(c.trading_market)}</td>
+      <td>${escapeHtml(c.exchange)}</td>
       <td>${escapeHtml(removalReasonLabel(c.reason))}</td>
       <td>${formatDate(c.checked_at)}</td>
     `;
@@ -735,7 +747,7 @@ async function lookupDeleteSymbol() {
   const stock = await res.json();
   deleteTargetStock = stock;
   deleteCompanyNameInput.value = stock.company_name;
-  deleteMarketInput.value = stock.trading_market;
+  deleteMarketInput.value = stock.exchange;
   deleteSubmitBtn.disabled = false;
 }
 
@@ -801,7 +813,7 @@ function renderDeletionLog(log) {
     tr.innerHTML = `
       <td>${escapeHtml(entry.stock_symbol)}</td>
       <td>${escapeHtml(entry.company_name)}</td>
-      <td>${escapeHtml(entry.trading_market)}</td>
+      <td>${escapeHtml(entry.exchange)}</td>
       <td>${formatDate(entry.deleted_at)}</td>
     `;
     deletionLogTableBody.appendChild(tr);
@@ -874,7 +886,7 @@ form.addEventListener('submit', async (e) => {
   const payload = {
     stock_symbol: stockSymbolInput.value.trim(),
     company_name: companyNameInput.value.trim(),
-    trading_market: tradingMarketInput.value,
+    exchange: tradingMarketInput.value.trim(),
   };
 
   const id = stockIdInput.value;

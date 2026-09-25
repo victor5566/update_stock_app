@@ -222,6 +222,16 @@ th {
   color: #3730a3;
 }
 
+.stock-symbol-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
 .btn-delete {
   background: #fef2f2;
   border-color: #fecaca;
@@ -262,6 +272,27 @@ th {
   color: var(--muted);
   text-align: center;
   padding: 24px 0 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.detail-grid dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-grid dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.detail-description {
+  white-space: pre-wrap;
 }
 
 @media (prefers-color-scheme: dark) {
