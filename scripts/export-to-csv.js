@@ -16,12 +16,16 @@ function csvEscape(value) {
 }
 
 async function main() {
+  const header = [
+    'stock_symbol', 'company_name', 'exchange', 'isdelisted', 'category', 'cusips',
+    'sector', 'industry', 'currency', 'company_location', 'urll', 'description', 'ceo',
+    'source', 'created_at', 'updated_at',
+  ];
+
   const { rows } = await pool.query(
-    `SELECT stock_symbol, company_name, trading_market, source, created_at, updated_at
-     FROM stocks ORDER BY stock_symbol ASC`
+    `SELECT ${header.join(', ')} FROM stocks ORDER BY stock_symbol ASC`
   );
 
-  const header = ['stock_symbol', 'company_name', 'trading_market', 'source', 'created_at', 'updated_at'];
   const lines = [header.join(',')];
   for (const row of rows) {
     lines.push(header.map((col) => csvEscape(row[col])).join(','));

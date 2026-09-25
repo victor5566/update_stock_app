@@ -1,5 +1,5 @@
 // Usage: node scripts/import-from-excel.js <path-to-xlsx> [sheet-name]
-// Reads a workbook with columns stock_symbol / company name / trading market
+// Reads a workbook with columns stock_symbol / company name / exchange
 // (header names are matched loosely) and inserts new rows into the stocks table.
 // Existing stock_symbols are left untouched (ON CONFLICT DO NOTHING).
 require('dotenv').config();
@@ -32,7 +32,7 @@ const MARKET_MAP = {
 
 const SYMBOL_HEADER_ALIASES = ['stock_symbol', 'stocksymbol', 'symbol', 'ticker'];
 const COMPANY_HEADER_ALIASES = ['company_name', 'companyname', 'company', 'name'];
-const MARKET_HEADER_ALIASES = ['trading_market', 'tradingmarket', 'market', 'exchange'];
+const MARKET_HEADER_ALIASES = ['exchange', 'trading_market', 'tradingmarket', 'market'];
 
 function normalizeHeader(value) {
   return String(value || '')
@@ -41,12 +41,13 @@ function normalizeHeader(value) {
     .replace(/[^a-z]/g, '');
 }
 
+// exchange is free text, so an unrecognized value is used as-is rather than rejected;
+// MARKET_MAP just normalizes the common aliases/codes to a consistent display form.
 function mapMarket(raw) {
-  const key = String(raw || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, '');
-  return MARKET_MAP[key] || null;
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  const key = trimmed.toUpperCase().replace(/[^A-Z]/g, '');
+  return MARKET_MAP[key] || trimmed;
 }
 
 function findColumns(headerRow) {
@@ -83,7 +84,7 @@ async function main() {
 
   if (!columns.symbol || !columns.company || !columns.market) {
     console.error(
-      'Could not find stock_symbol / company_name / trading_market columns in the header row.',
+      'Could not find stock_symbol / company_name / exchange columns in the header row.',
       'Found:', columns
     );
     process.exit(1);
@@ -91,7 +92,6 @@ async function main() {
 
   const bySymbol = new Map();
   const invalidRows = [];
-  const unmappedMarkets = new Set();
 
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
@@ -102,31 +102,27 @@ async function main() {
 
     const stock_symbol = String(rawSymbol || '').trim().toUpperCase();
     const company_name = String(rawCompany || '').trim();
-    const trading_market = mapMarket(rawMarket);
+    const exchange = mapMarket(rawMarket);
 
     if (!stock_symbol || !company_name) {
       invalidRows.push(rowNumber);
       return;
     }
-    if (!/^[A-Za-z.-]{1,10}$/.test(stock_symbol)) {
+    if (!/^[A-Za-z.-]{1,50}$/.test(stock_symbol)) {
       invalidRows.push(rowNumber);
       return;
     }
-    if (!trading_market) {
-      unmappedMarkets.add(String(rawMarket));
+    if (!exchange) {
       invalidRows.push(rowNumber);
       return;
     }
 
     // Later rows overwrite earlier ones for the same symbol.
-    bySymbol.set(stock_symbol, { stock_symbol, company_name, trading_market });
+    bySymbol.set(stock_symbol, { stock_symbol, company_name, exchange });
   });
 
   const stocks = [...bySymbol.values()];
   console.log(`Parsed ${stocks.length} unique valid rows (${invalidRows.length} skipped as invalid).`);
-  if (unmappedMarkets.size) {
-    console.log('Unmapped market values (add to MARKET_MAP if needed):', [...unmappedMarkets]);
-  }
 
   const client = await pool.connect();
   let inserted = 0;
@@ -135,11 +131,11 @@ async function main() {
     await client.query('BEGIN');
     for (const stock of stocks) {
       const result = await client.query(
-        `INSERT INTO stocks (stock_symbol, company_name, trading_market, source)
+        `INSERT INTO stocks (stock_symbol, company_name, exchange, source)
          VALUES ($1, $2, $3, 'excel_import')
          ON CONFLICT (stock_symbol) DO NOTHING
          RETURNING id`,
-        [stock.stock_symbol, stock.company_name, stock.trading_market]
+        [stock.stock_symbol, stock.company_name, stock.exchange]
       );
       if (result.rows.length) inserted++;
       else skippedExisting++;

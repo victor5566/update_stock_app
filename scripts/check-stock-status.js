@@ -5,17 +5,11 @@
 // This only writes to those two tables - it never changes the stocks table itself.
 require('dotenv').config();
 const pool = require('../db');
-const { yf, EXCHANGE_TO_MARKET } = require('../lib/yahoo');
+const { yf } = require('../lib/yahoo');
 const { companyNamesMatch } = require('../lib/normalizeCompanyName');
+const { sanitizeText } = require('../lib/sanitizeText');
 
 const BATCH_SIZE = 200;
-
-// Yahoo occasionally returns names with unpaired UTF-16 surrogates, which node-postgres
-// encodes as invalid UTF-8 bytes and Postgres then rejects. Round-tripping through a
-// Buffer replaces anything invalid with the standard U+FFFD replacement character.
-function sanitizeText(str) {
-  return Buffer.from(String(str), 'utf8').toString('utf8');
-}
 
 function chunk(array, size) {
   const chunks = [];
@@ -25,7 +19,7 @@ function chunk(array, size) {
 
 async function main() {
   const { rows: stocks } = await pool.query(
-    'SELECT id, stock_symbol, company_name, trading_market FROM stocks ORDER BY id'
+    'SELECT id, stock_symbol, company_name, exchange FROM stocks ORDER BY id'
   );
   console.log(`Checking ${stocks.length} stocks against Yahoo Finance...`);
 
@@ -60,27 +54,22 @@ async function main() {
         continue;
       }
 
-      const suggestedMarket = EXCHANGE_TO_MARKET[quote.exchange];
-      if (!suggestedMarket) {
-        removalCandidates.push({ stock, reason: 'unsupported_exchange' });
-        continue;
-      }
-
+      const suggestedExchange = quote.fullExchangeName || quote.exchange;
       const suggestedName = quote.longName || quote.shortName || stock.company_name;
 
-      if (suggestedMarket !== stock.trading_market) {
+      if (suggestedExchange !== stock.exchange) {
         updateCandidates.push({
           stock,
-          reason: 'market_mismatch',
+          reason: 'exchange_mismatch',
           suggestedName: stock.company_name,
-          suggestedMarket,
+          suggestedExchange,
         });
       } else if (!companyNamesMatch(stock.company_name, suggestedName)) {
         updateCandidates.push({
           stock,
           reason: 'company_name_mismatch',
           suggestedName,
-          suggestedMarket: stock.trading_market,
+          suggestedExchange: stock.exchange,
         });
       }
     }
@@ -98,7 +87,7 @@ async function main() {
       await client.query(
         `INSERT INTO stock_update_candidates
            (stock_id, stock_symbol, reason, current_company_name, suggested_company_name,
-            current_trading_market, suggested_trading_market)
+            current_exchange, suggested_exchange)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           c.stock.id,
@@ -106,8 +95,8 @@ async function main() {
           c.reason,
           sanitizeText(c.stock.company_name),
           sanitizeText(c.suggestedName),
-          c.stock.trading_market,
-          c.suggestedMarket,
+          c.stock.exchange,
+          c.suggestedExchange,
         ]
       );
     }
@@ -115,9 +104,9 @@ async function main() {
     for (const c of removalCandidates) {
       await client.query(
         `INSERT INTO stock_removal_candidates
-           (stock_id, stock_symbol, company_name, trading_market, reason)
+           (stock_id, stock_symbol, company_name, exchange, reason)
          VALUES ($1, $2, $3, $4, $5)`,
-        [c.stock.id, c.stock.stock_symbol, sanitizeText(c.stock.company_name), c.stock.trading_market, c.reason]
+        [c.stock.id, c.stock.stock_symbol, sanitizeText(c.stock.company_name), c.stock.exchange, c.reason]
       );
     }
 

@@ -18,12 +18,17 @@ async function addSymbol(symbol) {
 
   try {
     const result = await pool.query(
-      `INSERT INTO stocks (stock_symbol, company_name, trading_market, source)
-       VALUES ($1, $2, $3, 'yahoo') RETURNING *`,
-      [stockData.stock_symbol, stockData.company_name, stockData.trading_market]
+      `INSERT INTO stocks
+         (stock_symbol, company_name, exchange, source, sector, industry, currency, company_location, urll, description, ceo)
+       VALUES ($1, $2, $3, 'yahoo', $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [
+        stockData.stock_symbol, stockData.company_name, stockData.exchange,
+        stockData.sector, stockData.industry, stockData.currency,
+        stockData.company_location, stockData.urll, stockData.description, stockData.ceo,
+      ]
     );
     const row = result.rows[0];
-    console.log(`ADDED ${row.stock_symbol} - ${row.company_name} (${row.trading_market})`);
+    console.log(`ADDED ${row.stock_symbol} - ${row.company_name} (${row.exchange})`);
   } catch (err) {
     if (err.code === '23505') {
       console.log(`SKIP ${stockData.stock_symbol}: already exists`);

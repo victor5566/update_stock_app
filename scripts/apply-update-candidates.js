@@ -9,7 +9,7 @@ const { applyStockUpdate } = require('../lib/applyStockUpdate');
 
 async function main() {
   const { rows: candidates } = await pool.query(
-    `SELECT id, stock_id, stock_symbol, reason, suggested_company_name, suggested_trading_market
+    `SELECT id, stock_id, stock_symbol, reason, suggested_company_name, suggested_exchange
      FROM stock_update_candidates ORDER BY id`
   );
 
@@ -25,7 +25,7 @@ async function main() {
 
       const updated = await applyStockUpdate(client, candidate.stock_id, {
         company_name: candidate.suggested_company_name,
-        trading_market: candidate.suggested_trading_market,
+        exchange: candidate.suggested_exchange,
       });
 
       if (!updated) {
