@@ -29,6 +29,11 @@ const TRANSLATIONS = {
     confirmDelete: (symbol, company) => `確定要刪除 ${symbol}（${company}）嗎？`,
     deleteFailed: '刪除失敗',
     operationFailed: '操作失敗',
+    duplicateSymbol: (symbol) => `股票代碼 ${symbol} 已存在，不能重複新增。查看：`,
+    yahooLookupRunning: (symbol) => `正在從 Yahoo 查詢 ${symbol}…`,
+    yahooLookupFilled: (symbol) => `已從 Yahoo 帶入 ${symbol} 的公司名稱與交易市場，請確認後新增`,
+    yahooLookupNotFound: (symbol) => `Yahoo 查無 ${symbol}，請手動填寫公司名稱與交易市場`,
+    addedStock: (symbol) => `已新增 ${symbol}，公司資訊會在幾秒內自動補齊。查看：`,
     locale: 'zh-TW',
     renameSectionTitle: '修改公司名稱',
     renameCurrentName: '目前公司名稱',
@@ -62,6 +67,11 @@ const TRANSLATIONS = {
     removalReasonNotFound: '查無資料',
     removalReasonNotEquity: '非普通股',
     removalReasonUnsupportedExchange: '交易所無法對應',
+    removalRefreshBtn: '重新檢測',
+    removalRefreshRunning: '檢測並更新中，約需數十秒…',
+    removalRefreshDone: (removals, applied) => `檢測完成：已更新 ${applied} 筆股票資訊，${removals} 筆移除候選`,
+    removalRefreshFailed: (msg) => `檢測失敗：${msg}`,
+    removalRefreshUnavailable: '伺服器不支援重新檢測，請重新啟動伺服器（npm start）',
     deletionLogTitle: '已刪除股票紀錄',
     deletionLogThDate: '刪除時間',
     deletionLogEmpty: '目前沒有刪除紀錄',
@@ -95,6 +105,11 @@ const TRANSLATIONS = {
     confirmDelete: (symbol, company) => `Delete ${symbol} (${company})? This cannot be undone.`,
     deleteFailed: 'Delete failed',
     operationFailed: 'Operation failed',
+    duplicateSymbol: (symbol) => `Stock symbol ${symbol} already exists and cannot be added again. View: `,
+    yahooLookupRunning: (symbol) => `Looking up ${symbol} on Yahoo…`,
+    yahooLookupFilled: (symbol) => `Filled in ${symbol}'s company name and market from Yahoo - check them, then add`,
+    yahooLookupNotFound: (symbol) => `${symbol} not found on Yahoo - fill in the company name and market manually`,
+    addedStock: (symbol) => `Added ${symbol}; company info fills in automatically within a few seconds. View: `,
     locale: 'en-US',
     renameSectionTitle: 'Update Company Name',
     renameCurrentName: 'Current Company Name',
@@ -128,6 +143,11 @@ const TRANSLATIONS = {
     removalReasonNotFound: 'Not found on Yahoo Finance',
     removalReasonNotEquity: 'Not a common equity',
     removalReasonUnsupportedExchange: 'Unsupported exchange',
+    removalRefreshBtn: 'Re-check',
+    removalRefreshRunning: 'Checking and updating, takes about half a minute…',
+    removalRefreshDone: (removals, applied) => `Check complete: updated ${applied} stocks, ${removals} removal candidates`,
+    removalRefreshFailed: (msg) => `Check failed: ${msg}`,
+    removalRefreshUnavailable: 'Server does not support re-checking yet - restart it (npm start)',
     deletionLogTitle: 'Deleted Stocks Log',
     deletionLogThDate: 'Deleted At',
     deletionLogEmpty: 'No deletions yet',
@@ -152,6 +172,7 @@ const tradingMarketInput = document.getElementById('trading-market');
 const submitBtn = document.getElementById('submit-btn');
 const cancelBtn = document.getElementById('cancel-btn');
 const formError = document.getElementById('form-error');
+const formHint = document.getElementById('form-hint');
 
 const exchangeDatalist = document.getElementById('exchange-datalist');
 
@@ -207,6 +228,8 @@ const removalCandidatesEmptyState = document.getElementById('removal-candidates-
 const removalPrevPageBtn = document.getElementById('removal-prev-page-btn');
 const removalNextPageBtn = document.getElementById('removal-next-page-btn');
 const removalPageIndicator = document.getElementById('removal-page-indicator');
+const removalRefreshBtn = document.getElementById('removal-refresh-btn');
+const removalRefreshStatus = document.getElementById('removal-refresh-status');
 
 const deleteForm = document.getElementById('delete-form');
 const deleteSymbolInput = document.getElementById('delete-symbol');
@@ -266,9 +289,78 @@ function showError(message) {
   formError.hidden = false;
 }
 
+// Warning for adding a symbol that's already in the list, with a link to its detail page.
+function showDuplicateError(symbol) {
+  const link = document.createElement('a');
+  link.href = `/${encodeURIComponent(symbol.toLowerCase())}`;
+  link.textContent = symbol;
+  formError.replaceChildren(t('duplicateSymbol')(symbol), link);
+  formError.hidden = false;
+}
+
 function clearError() {
   formError.hidden = true;
   formError.textContent = '';
+}
+
+// Neutral (non-error) message under the add form; `symbol` appends a link to its detail page.
+function showHint(message, symbol) {
+  const parts = [message];
+  if (symbol) {
+    const link = document.createElement('a');
+    link.href = `/${encodeURIComponent(symbol.toLowerCase())}`;
+    link.textContent = symbol;
+    parts.push(link);
+  }
+  formHint.replaceChildren(...parts);
+  formHint.hidden = false;
+}
+
+function clearHint() {
+  formHint.hidden = true;
+  formHint.textContent = '';
+}
+
+// What the last Yahoo lookup put into the name/market inputs, so a later lookup (symbol
+// changed) may overwrite them - but never overwrite something the user typed themselves.
+let yahooFilled = { company_name: '', exchange: '' };
+
+// Add mode only: once a symbol is entered, warn right away if it's a duplicate, otherwise
+// pre-fill company name / market from Yahoo.
+async function lookupSymbolForAdd() {
+  if (stockIdInput.value) return;
+  const symbol = stockSymbolInput.value.trim().toUpperCase();
+  clearError();
+  clearHint();
+  if (!symbol) return;
+
+  if (allStocks.some((s) => s.stock_symbol === symbol)) {
+    showDuplicateError(symbol);
+    return;
+  }
+
+  showHint(t('yahooLookupRunning')(symbol));
+  let data = null;
+  try {
+    const res = await fetch(`${API_BASE}/yahoo-lookup/${encodeURIComponent(symbol)}`);
+    if (res.ok) data = await res.json();
+  } catch {
+    // treated the same as not found
+  }
+  // The user may have typed a different symbol (or submitted) while this was in flight.
+  if (stockIdInput.value || stockSymbolInput.value.trim().toUpperCase() !== symbol) return;
+
+  if (!data) {
+    showHint(t('yahooLookupNotFound')(symbol));
+    return;
+  }
+  for (const [input, key] of [[companyNameInput, 'company_name'], [tradingMarketInput, 'exchange']]) {
+    if (!input.value.trim() || input.value === yahooFilled[key]) {
+      input.value = data[key] || '';
+      yahooFilled[key] = input.value;
+    }
+  }
+  showHint(t('yahooLookupFilled')(symbol));
 }
 
 function resetForm() {
@@ -276,8 +368,10 @@ function resetForm() {
   stockIdInput.value = '';
   editingStock = null;
   cancelBtn.hidden = true;
+  yahooFilled = { company_name: '', exchange: '' };
   updateFormHeader();
   clearError();
+  clearHint();
 }
 
 function enterEditMode(stock) {
@@ -289,6 +383,7 @@ function enterEditMode(stock) {
   cancelBtn.hidden = false;
   updateFormHeader();
   clearError();
+  clearHint();
   stockSymbolInput.focus();
 }
 
@@ -666,6 +761,72 @@ function removalReasonLabel(reason) {
   return reason;
 }
 
+const REFRESH_POLL_MS = 3000;
+
+// Runs the Yahoo status check server-side (same as scripts/check-stock-status.js), then
+// reloads the removal candidates once it finishes.
+async function startRemovalRefresh() {
+  removalRefreshBtn.disabled = true;
+  removalRefreshStatus.textContent = t('removalRefreshRunning');
+  let res;
+  try {
+    res = await fetch('/api/removal-candidates/refresh', { method: 'POST' });
+  } catch (err) {
+    showRemovalRefreshError(err.message);
+    return;
+  }
+  // 409 just means a run is already in progress - poll it the same way.
+  if (!res.ok && res.status !== 409) {
+    showRemovalRefreshError(res.status === 404 ? null : `HTTP ${res.status}`);
+    return;
+  }
+  pollRemovalRefresh();
+}
+
+// message null = the endpoint doesn't exist (server still running pre-button code).
+function showRemovalRefreshError(message) {
+  removalRefreshBtn.disabled = false;
+  removalRefreshStatus.textContent = message === null
+    ? t('removalRefreshUnavailable')
+    : t('removalRefreshFailed')(message);
+}
+
+// silent: used on page load, where there may be no run to report on - don't show errors then.
+async function pollRemovalRefresh({ silent = false } = {}) {
+  let state;
+  try {
+    const res = await fetch('/api/removal-candidates/refresh-status');
+    if (!res.ok) {
+      if (!silent) showRemovalRefreshError(res.status === 404 ? null : `HTTP ${res.status}`);
+      return;
+    }
+    state = await res.json();
+  } catch (err) {
+    if (!silent) showRemovalRefreshError(err.message);
+    return;
+  }
+
+  if (state.running) {
+    removalRefreshBtn.disabled = true;
+    removalRefreshStatus.textContent = t('removalRefreshRunning');
+    setTimeout(pollRemovalRefresh, REFRESH_POLL_MS);
+    return;
+  }
+
+  removalRefreshBtn.disabled = false;
+  if (state.error) {
+    removalRefreshStatus.textContent = t('removalRefreshFailed')(state.error);
+  } else if (state.result) {
+    removalRefreshStatus.textContent = t('removalRefreshDone')(state.result.removalCount, state.result.applied ?? 0);
+    fetchRemovalCandidates();
+    // The re-check applies name/market changes directly, so the list and history changed too.
+    if (state.result.applied) {
+      fetchStocks();
+      fetchHistory();
+    }
+  }
+}
+
 async function fetchRemovalCandidates() {
   const res = await fetch('/api/removal-candidates');
   lastRemovalCandidates = await res.json();
@@ -699,6 +860,8 @@ function renderRemovalCandidates(candidates) {
   removalPrevPageBtn.disabled = removalPage <= 1;
   removalNextPageBtn.disabled = removalPage >= totalPages;
 }
+
+removalRefreshBtn.addEventListener('click', startRemovalRefresh);
 
 removalPrevPageBtn.addEventListener('click', () => {
   removalPage -= 1;
@@ -882,6 +1045,7 @@ symbolForm.addEventListener('submit', async (e) => {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   clearError();
+  clearHint();
 
   const payload = {
     stock_symbol: stockSymbolInput.value.trim(),
@@ -892,6 +1056,12 @@ form.addEventListener('submit', async (e) => {
   const id = stockIdInput.value;
   const isEdit = Boolean(id);
 
+  const upperSymbol = payload.stock_symbol.toUpperCase();
+  if (!isEdit && allStocks.some((s) => s.stock_symbol === upperSymbol)) {
+    showDuplicateError(upperSymbol);
+    return;
+  }
+
   const res = await fetch(isEdit ? `${API_BASE}/${id}` : API_BASE, {
     method: isEdit ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -901,16 +1071,24 @@ form.addEventListener('submit', async (e) => {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    showError(data.errors?.join(', ') || t('operationFailed'));
+    if (!isEdit && res.status === 409) {
+      showDuplicateError(upperSymbol);
+    } else {
+      showError(data.errors?.join(', ') || t('operationFailed'));
+    }
     return;
   }
 
   resetForm();
+  if (!isEdit) showHint(t('addedStock')(data.stock_symbol), data.stock_symbol);
   fetchStocks();
   fetchHistory();
   fetchSymbolHistory();
   if (!isEdit) fetchManualAddLog();
 });
+
+// 'change' fires once the symbol is committed (blur / Enter / datalist pick), not per keystroke.
+stockSymbolInput.addEventListener('change', lookupSymbolForAdd);
 
 cancelBtn.addEventListener('click', resetForm);
 
@@ -956,3 +1134,4 @@ fetchSymbolHistory();
 fetchManualAddLog();
 fetchRemovalCandidates();
 fetchDeletionLog();
+pollRemovalRefresh({ silent: true }); // pick up a check still running from before a page reload

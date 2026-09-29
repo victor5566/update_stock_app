@@ -47,6 +47,7 @@
           <button type="button" id="cancel-btn" hidden data-i18n="cancel">取消</button>
         </div>
         <p id="form-error" class="error" hidden></p>
+        <p id="form-hint" class="form-hint" aria-live="polite" hidden></p>
       </form>
     </section>
 
@@ -241,7 +242,13 @@
     </section>
 
     <section class="history-section">
-      <h2 data-i18n="removalCandidatesTitle">移除候選清單</h2>
+      <div class="list-toolbar">
+        <h2 data-i18n="removalCandidatesTitle">移除候選清單</h2>
+        <div class="toolbar-controls">
+          <span id="removal-refresh-status" class="refresh-status" aria-live="polite"></span>
+          <button type="button" id="removal-refresh-btn" data-i18n="removalRefreshBtn">重新檢測</button>
+        </div>
+      </div>
       <table id="removal-candidates-table">
         <thead>
           <tr>

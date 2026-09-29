@@ -160,6 +160,13 @@ button {
   margin: 0;
 }
 
+.form-hint {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
 .list-toolbar {
   display: flex;
   justify-content: space-between;
@@ -176,6 +183,15 @@ button {
 .toolbar-controls {
   display: flex;
   gap: 8px;
+}
+
+.toolbar-controls {
+  align-items: center;
+}
+
+.refresh-status {
+  font-size: 13px;
+  color: var(--muted, #666);
 }
 
 .toolbar-controls input,

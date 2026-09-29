@@ -3,8 +3,9 @@
 // columns (sector/industry/currency/company_location/urll/description/ceo) directly - see
 // lib/fillCompanyDetails.js for the shared fetch+write logic (also used by the auto-fill
 // triggered on new manual additions in routes/stocks.js).
-// With no symbols given, processes every stock that doesn't have a sector filled in yet
-// (a reasonable proxy for "never backfilled").
+// With no symbols given, processes every stock missing any of those detail fields (not just
+// sector - plenty of stocks have a sector but no CEO/description/address). Existing values
+// are never cleared, only filled in or refreshed.
 // Requests are spaced YAHOO_DELAY_MS (default 200ms) apart to avoid tripping Yahoo's
 // unofficial API's rate limiting on a large batch run.
 require('dotenv').config();
@@ -22,7 +23,12 @@ async function main() {
 
   const { rows: stocks } = symbols.length
     ? await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE stock_symbol = ANY($1)', [symbols])
-    : await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE sector IS NULL ORDER BY id');
+    : await pool.query(
+        `SELECT id, stock_symbol, company_name FROM stocks
+         WHERE sector IS NULL OR industry IS NULL OR currency IS NULL OR company_location IS NULL
+            OR urll IS NULL OR description IS NULL OR ceo IS NULL
+         ORDER BY id`
+      );
 
   if (symbols.length && stocks.length < symbols.length) {
     const found = new Set(stocks.map((s) => s.stock_symbol));

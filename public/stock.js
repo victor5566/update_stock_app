@@ -128,6 +128,25 @@ async function loadStock() {
   notFoundSection.hidden = true;
   detailSection.hidden = false;
   renderStock(currentStock);
+  scheduleAutoFillRefresh();
+}
+
+// A manual add fills sector/CUSIP/etc. in the background a few seconds after the row is
+// created (see POST /api/stocks), and the add form links straight here - so for a stock
+// that's brand new and still missing those details, re-fetch a few times until they land.
+const AUTO_FILL_WINDOW_MS = 2 * 60 * 1000;
+const AUTO_FILL_POLL_MS = 3000;
+const AUTO_FILL_MAX_POLLS = 10;
+let autoFillPolls = 0;
+
+function scheduleAutoFillRefresh() {
+  const s = currentStock;
+  const isFresh = Date.now() - new Date(s.created_at).getTime() < AUTO_FILL_WINDOW_MS;
+  const stillMissing = !s.sector || !s.cusips;
+  if (isFresh && stillMissing && autoFillPolls < AUTO_FILL_MAX_POLLS) {
+    autoFillPolls += 1;
+    setTimeout(loadStock, AUTO_FILL_POLL_MS);
+  }
 }
 
 langSwitch.addEventListener('change', () => {

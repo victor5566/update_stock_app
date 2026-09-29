@@ -4,6 +4,7 @@ const { applyStockUpdate } = require('../lib/applyStockUpdate');
 const { isValidCusip } = require('../lib/validateCusip');
 const { fillCompanyDetails } = require('../lib/fillCompanyDetails');
 const { lookupCusip } = require('../lib/cusipLookup');
+const { lookupStock, YahooLookupError } = require('../lib/yahoo');
 
 const router = express.Router();
 
@@ -140,6 +141,20 @@ router.get('/by-symbol/:symbol', async (req, res, next) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stocks/yahoo-lookup/AA - pre-fills the add form's company name / exchange from
+// Yahoo as soon as a symbol is typed. Read-only: never writes to the database.
+router.get('/yahoo-lookup/:symbol', async (req, res, next) => {
+  try {
+    const found = await lookupStock(req.params.symbol.trim().toUpperCase());
+    res.json({ stock_symbol: found.stock_symbol, company_name: found.company_name, exchange: found.exchange });
+  } catch (err) {
+    if (err instanceof YahooLookupError) {
+      return res.status(404).json({ errors: [err.message] });
+    }
     next(err);
   }
 });
