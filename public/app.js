@@ -11,6 +11,7 @@ const TRANSLATIONS = {
     listTitle: '股票列表',
     searchPlaceholder: '搜尋代碼或公司名稱',
     allMarkets: '全部市場',
+    exportCsvBtn: '匯出 CSV',
     thSymbol: '股票代碼',
     thCompany: '公司名稱',
     thMarket: '交易市場',
@@ -89,6 +90,7 @@ const TRANSLATIONS = {
     listTitle: 'Stock List',
     searchPlaceholder: 'Search symbol or company name',
     allMarkets: 'All Markets',
+    exportCsvBtn: 'Export CSV',
     thSymbol: 'Stock Symbol',
     thCompany: 'Company Name',
     thMarket: 'Trading Market',
@@ -182,6 +184,7 @@ const exchangeDatalist = document.getElementById('exchange-datalist');
 
 const searchInput = document.getElementById('search-input');
 const marketFilter = document.getElementById('market-filter');
+const exportCsvBtn = document.getElementById('export-csv-btn');
 const tableBody = document.getElementById('stock-table-body');
 const emptyState = document.getElementById('empty-state');
 const prevPageBtn = document.getElementById('prev-page-btn');
@@ -1124,6 +1127,15 @@ searchInput.addEventListener('input', () => {
 });
 
 marketFilter.addEventListener('change', fetchStocks);
+
+// Exports exactly what the list currently shows: same market / search filters as
+// fetchStocks(), all columns, served as a download by GET /api/stocks/export.csv.
+exportCsvBtn.addEventListener('click', () => {
+  const params = new URLSearchParams();
+  if (marketFilter.value) params.set('market', marketFilter.value);
+  if (searchInput.value.trim()) params.set('q', searchInput.value.trim());
+  window.location.href = `${API_BASE}/export.csv?${params.toString()}`;
+});
 
 prevPageBtn.addEventListener('click', () => {
   currentPage -= 1;

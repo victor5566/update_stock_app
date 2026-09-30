@@ -8,6 +8,7 @@ const { lookupStock, YahooLookupError, symbolsEquivalent } = require('../lib/yah
 const { getCachedListing } = require('../lib/nasdaqTrader');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
 const { sameCompany } = require('../lib/normalizeCompanyName');
+const { EXPORT_COLUMNS, toCsv } = require('../lib/stockCsv');
 
 const router = express.Router();
 
@@ -115,28 +116,54 @@ function extractDetailFields(body) {
   return fields;
 }
 
+// WHERE clause for the stock list's filters (?market=&q=&source=). Shared by the list and
+// its CSV export so the export is always exactly what the list shows.
+function buildStockFilter({ market, q, source }) {
+  const conditions = [];
+  const params = [];
+
+  if (market) {
+    params.push(market);
+    conditions.push(`exchange = $${params.length}`);
+  }
+  if (q) {
+    params.push(`%${q}%`);
+    conditions.push(`(stock_symbol ILIKE $${params.length} OR company_name ILIKE $${params.length})`);
+  }
+  if (source) {
+    params.push(source);
+    conditions.push(`source = $${params.length}`);
+  }
+
+  return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
+}
+
+// GET /api/stocks/export.csv?market=OTC&q=bank - the stock list's "Export CSV" button.
+// All columns (lib/stockCsv.js), UTF-8 with a BOM so Excel shows "Latécoère" correctly,
+// downloaded as e.g. stocks_OTC_bank_2026-09-30.csv.
+router.get('/export.csv', async (req, res, next) => {
+  try {
+    const { where, params } = buildStockFilter(req.query);
+    const result = await pool.query(
+      `SELECT ${EXPORT_COLUMNS.join(', ')} FROM stocks ${where} ORDER BY stock_symbol ASC`,
+      params
+    );
+    const nameParts = ['stocks', req.query.market || 'all', req.query.q, new Date().toISOString().slice(0, 10)]
+      .filter(Boolean)
+      .map((part) => String(part).replace(/[^A-Za-z0-9.-]+/g, '_'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nameParts.join('_')}.csv"`);
+    res.send('﻿' + toCsv(result.rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/stocks?market=NASDAQ&q=apple&source=manual
 router.get('/', async (req, res, next) => {
   try {
-    const { market, q, source } = req.query;
-    const conditions = [];
-    const params = [];
-
-    if (market) {
-      params.push(market);
-      conditions.push(`exchange = $${params.length}`);
-    }
-    if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`(stock_symbol ILIKE $${params.length} OR company_name ILIKE $${params.length})`);
-    }
-    if (source) {
-      params.push(source);
-      conditions.push(`source = $${params.length}`);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const orderBy = source ? 'created_at DESC' : 'stock_symbol ASC';
+    const { where, params } = buildStockFilter(req.query);
+    const orderBy = req.query.source ? 'created_at DESC' : 'stock_symbol ASC';
     const result = await pool.query(
       `SELECT id, stock_symbol, company_name, exchange, source, created_at, updated_at
        FROM stocks ${where} ORDER BY ${orderBy}`,

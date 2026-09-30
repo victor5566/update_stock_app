@@ -1,38 +1,21 @@
 // Usage: node scripts/export-to-csv.js
-// Exports the full stocks table to exports/stocks.csv.
+// Exports the full stocks table to exports/stocks.csv (format: lib/stockCsv.js, shared with
+// the stock list's "Export CSV" button).
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const pool = require('../db');
+const { EXPORT_COLUMNS, toCsv } = require('../lib/stockCsv');
 
 const OUTPUT_PATH = path.join(__dirname, '..', 'exports', 'stocks.csv');
 
-function csvEscape(value) {
-  const str = value instanceof Date ? value.toISOString() : value === null || value === undefined ? '' : String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
 async function main() {
-  const header = [
-    'stock_symbol', 'company_name', 'exchange', 'isdelisted', 'category', 'cusips',
-    'sector', 'industry', 'currency', 'company_location', 'urll', 'description', 'ceo',
-    'source', 'created_at', 'updated_at',
-  ];
-
   const { rows } = await pool.query(
-    `SELECT ${header.join(', ')} FROM stocks ORDER BY stock_symbol ASC`
+    `SELECT ${EXPORT_COLUMNS.join(', ')} FROM stocks ORDER BY stock_symbol ASC`
   );
 
-  const lines = [header.join(',')];
-  for (const row of rows) {
-    lines.push(header.map((col) => csvEscape(row[col])).join(','));
-  }
-
   fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-  fs.writeFileSync(OUTPUT_PATH, lines.join('\n') + '\n', 'utf8');
+  fs.writeFileSync(OUTPUT_PATH, toCsv(rows), 'utf8');
 
   console.log(`Exported ${rows.length} stocks to ${OUTPUT_PATH}`);
   await pool.end();
