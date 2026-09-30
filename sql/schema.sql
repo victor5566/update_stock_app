@@ -39,6 +39,10 @@ ALTER TABLE stocks ADD COLUMN IF NOT EXISTS cusips VARCHAR(255);
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS sector VARCHAR(255);
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS industry VARCHAR(255);
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS currency VARCHAR(255);
+-- Every stock here trades on a US market, so currency is always USD (never Yahoo's value,
+-- which follows a foreign listing when the details fallback is used).
+ALTER TABLE stocks ALTER COLUMN currency SET DEFAULT 'USD';
+UPDATE stocks SET currency = 'USD' WHERE currency IS DISTINCT FROM 'USD';
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS company_location VARCHAR(255);
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS urll VARCHAR(255);
 ALTER TABLE stocks ADD COLUMN IF NOT EXISTS description VARCHAR(10000);

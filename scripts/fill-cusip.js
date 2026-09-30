@@ -26,8 +26,8 @@ async function main() {
   const symbols = process.argv.slice(2).map((s) => s.trim().toUpperCase());
 
   const { rows: stocks } = symbols.length
-    ? await pool.query('SELECT id, stock_symbol FROM stocks WHERE stock_symbol = ANY($1)', [symbols])
-    : await pool.query('SELECT id, stock_symbol FROM stocks WHERE cusips IS NULL ORDER BY id');
+    ? await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE stock_symbol = ANY($1)', [symbols])
+    : await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE cusips IS NULL ORDER BY id');
 
   if (symbols.length && stocks.length < symbols.length) {
     const found = new Set(stocks.map((s) => s.stock_symbol));
@@ -42,6 +42,7 @@ async function main() {
   for (let i = 0; i < stocks.length; i++) {
     const stock = stocks[i];
     const { cusip, source } = await lookupCusip(stock.stock_symbol, {
+      companyName: stock.company_name,
       onSourceError: (src, err) => console.log(`  (${src} lookup failed for ${stock.stock_symbol}: ${err.message})`),
     });
 

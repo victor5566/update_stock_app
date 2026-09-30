@@ -59,7 +59,7 @@ async function main() {
   const tickerToCik = await getTickerToCik();
 
   const { rows } = await pool.query(
-    'SELECT id, stock_symbol, cusips FROM stocks WHERE cusips IS NOT NULL ORDER BY id'
+    'SELECT id, stock_symbol, company_name, cusips FROM stocks WHERE cusips IS NOT NULL ORDER BY id'
   );
   const stocks = rows
     .map((s) => ({ ...s, cik: tickerToCik.get(toYahooSymbol(s.stock_symbol)) || tickerToCik.get(s.stock_symbol) }))
@@ -77,6 +77,7 @@ async function main() {
       if (stock.cusips === (await wrongOldPickCusip(stock.cik))) {
         const sourceErrors = [];
         const { cusip, source } = await lookupCusip(stock.stock_symbol, {
+          companyName: stock.company_name,
           onSourceError: (src, err) => sourceErrors.push(`${src}: ${err.message}`),
         });
         if (sourceErrors.length) {
