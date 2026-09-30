@@ -31,8 +31,8 @@ const TRANSLATIONS = {
     operationFailed: '操作失敗',
     duplicateSymbol: (symbol) => `股票代碼 ${symbol} 已存在，不能重複新增。查看：`,
     yahooLookupRunning: (symbol) => `正在從 Yahoo 查詢 ${symbol}…`,
-    yahooLookupFilled: (symbol) => `已從 Yahoo 帶入 ${symbol} 的公司名稱與交易市場，請確認後新增`,
-    yahooLookupNotFound: (symbol) => `Yahoo 查無 ${symbol}，請手動填寫公司名稱與交易市場`,
+    yahooLookupFilled: (symbol, source) => `已從${source === 'nasdaq_trader' ? ' NASDAQ Trader 官方清單' : ' Yahoo'}帶入 ${symbol} 的公司名稱與交易市場，請確認後新增`,
+    yahooLookupNotFound: (symbol) => `NASDAQ Trader 官方清單與 Yahoo 都查無 ${symbol}，請手動填寫公司名稱與交易市場`,
     addedStock: (symbol) => `已新增 ${symbol}，公司資訊會在幾秒內自動補齊。查看：`,
     locale: 'zh-TW',
     renameSectionTitle: '修改公司名稱',
@@ -70,6 +70,8 @@ const TRANSLATIONS = {
     removalRefreshBtn: '重新檢測',
     removalRefreshRunning: '檢測並更新中，約需數十秒…',
     removalRefreshDone: (removals, applied) => `檢測完成：已更新 ${applied} 筆股票資訊，${removals} 筆移除候選`,
+    removalRefreshPartial: (failed) => `（注意：${failed} 批 Yahoo 查詢失敗，這些股票本次未檢查）`,
+    removalRefreshNoListing: '（注意：NASDAQ Trader 清單無法下載，本次不更新上市股票的名稱與市場）',
     removalRefreshFailed: (msg) => `檢測失敗：${msg}`,
     removalRefreshUnavailable: '伺服器不支援重新檢測，請重新啟動伺服器（npm start）',
     deletionLogTitle: '已刪除股票紀錄',
@@ -107,8 +109,8 @@ const TRANSLATIONS = {
     operationFailed: 'Operation failed',
     duplicateSymbol: (symbol) => `Stock symbol ${symbol} already exists and cannot be added again. View: `,
     yahooLookupRunning: (symbol) => `Looking up ${symbol} on Yahoo…`,
-    yahooLookupFilled: (symbol) => `Filled in ${symbol}'s company name and market from Yahoo - check them, then add`,
-    yahooLookupNotFound: (symbol) => `${symbol} not found on Yahoo - fill in the company name and market manually`,
+    yahooLookupFilled: (symbol, source) => `Filled in ${symbol}'s company name and market from ${source === 'nasdaq_trader' ? "NASDAQ Trader's official listing" : 'Yahoo'} - check them, then add`,
+    yahooLookupNotFound: (symbol) => `${symbol} not found on NASDAQ Trader's listing or Yahoo - fill in the company name and market manually`,
     addedStock: (symbol) => `Added ${symbol}; company info fills in automatically within a few seconds. View: `,
     locale: 'en-US',
     renameSectionTitle: 'Update Company Name',
@@ -146,6 +148,8 @@ const TRANSLATIONS = {
     removalRefreshBtn: 'Re-check',
     removalRefreshRunning: 'Checking and updating, takes about half a minute…',
     removalRefreshDone: (removals, applied) => `Check complete: updated ${applied} stocks, ${removals} removal candidates`,
+    removalRefreshPartial: (failed) => ` (warning: ${failed} Yahoo batch(es) failed - those stocks weren't checked)`,
+    removalRefreshNoListing: ' (warning: NASDAQ Trader listing unavailable - no name/market updates for listed stocks this run)',
     removalRefreshFailed: (msg) => `Check failed: ${msg}`,
     removalRefreshUnavailable: 'Server does not support re-checking yet - restart it (npm start)',
     deletionLogTitle: 'Deleted Stocks Log',
@@ -341,15 +345,23 @@ async function lookupSymbolForAdd() {
 
   showHint(t('yahooLookupRunning')(symbol));
   let data = null;
+  let existingSymbol = null;
   try {
     const res = await fetch(`${API_BASE}/yahoo-lookup/${encodeURIComponent(symbol)}`);
     if (res.ok) data = await res.json();
+    // 409: we already hold it under another spelling ("BRK-B" typed, "BRK.B" held)
+    else if (res.status === 409) existingSymbol = (await res.json()).existing_symbol || symbol;
   } catch {
     // treated the same as not found
   }
   // The user may have typed a different symbol (or submitted) while this was in flight.
   if (stockIdInput.value || stockSymbolInput.value.trim().toUpperCase() !== symbol) return;
 
+  if (existingSymbol) {
+    clearHint();
+    showDuplicateError(existingSymbol);
+    return;
+  }
   if (!data) {
     showHint(t('yahooLookupNotFound')(symbol));
     return;
@@ -360,7 +372,7 @@ async function lookupSymbolForAdd() {
       yahooFilled[key] = input.value;
     }
   }
-  showHint(t('yahooLookupFilled')(symbol));
+  showHint(t('yahooLookupFilled')(symbol, data.source));
 }
 
 function resetForm() {
@@ -427,6 +439,17 @@ function populateStockDatalist() {
     option.value = exchange;
     exchangeDatalist.appendChild(option);
   }
+
+  // Market filter is a <select>, not a datalist input: once a datalist input held "OTC" the
+  // browser only suggested values matching "OTC", so there was no way back to the other
+  // markets without clearing it by hand. Keep the first "All Markets" option, rebuild the
+  // rest from the markets actually present, and keep the current choice selected.
+  const selected = marketFilter.value;
+  while (marketFilter.options.length > 1) marketFilter.remove(1);
+  for (const exchange of [...exchanges].sort()) {
+    marketFilter.add(new Option(exchange, exchange));
+  }
+  marketFilter.value = exchanges.has(selected) ? selected : '';
 }
 
 function renderTable(stocks) {
@@ -817,7 +840,9 @@ async function pollRemovalRefresh({ silent = false } = {}) {
   if (state.error) {
     removalRefreshStatus.textContent = t('removalRefreshFailed')(state.error);
   } else if (state.result) {
-    removalRefreshStatus.textContent = t('removalRefreshDone')(state.result.removalCount, state.result.applied ?? 0);
+    removalRefreshStatus.textContent = t('removalRefreshDone')(state.result.removalCount, state.result.applied ?? 0)
+      + (state.result.failedBatches ? t('removalRefreshPartial')(state.result.failedBatches) : '')
+      + (state.result.listingAvailable === false ? t('removalRefreshNoListing') : '');
     fetchRemovalCandidates();
     // The re-check applies name/market changes directly, so the list and history changed too.
     if (state.result.applied) {
@@ -1071,8 +1096,9 @@ form.addEventListener('submit', async (e) => {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    if (!isEdit && res.status === 409) {
-      showDuplicateError(upperSymbol);
+    if (res.status === 409) {
+      // existing_symbol: the spelling we actually hold ("BRK.B" when "BRK-B" was typed)
+      showDuplicateError(data.existing_symbol || upperSymbol);
     } else {
       showError(data.errors?.join(', ') || t('operationFailed'));
     }

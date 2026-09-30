@@ -104,7 +104,9 @@
         <h2 data-i18n="listTitle">股票列表</h2>
         <div class="toolbar-controls">
           <input type="search" id="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="搜尋代碼或公司名稱" />
-          <input type="text" id="market-filter" list="exchange-datalist" data-i18n-placeholder="allMarkets" placeholder="全部市場" autocomplete="off" />
+          <select id="market-filter">
+            <option value="" data-i18n="allMarkets">全部市場</option>
+          </select>
         </div>
       </div>
 

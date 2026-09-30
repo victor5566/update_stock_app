@@ -4,9 +4,26 @@ const { applyStockUpdate } = require('../lib/applyStockUpdate');
 const { isValidCusip } = require('../lib/validateCusip');
 const { fillCompanyDetails } = require('../lib/fillCompanyDetails');
 const { lookupCusip } = require('../lib/cusipLookup');
-const { lookupStock, YahooLookupError } = require('../lib/yahoo');
+const { lookupStock, YahooLookupError, symbolsEquivalent } = require('../lib/yahoo');
+const { getCachedListing } = require('../lib/nasdaqTrader');
+const { cleanSecurityName } = require('../lib/cleanSecurityName');
+const { sameCompany } = require('../lib/normalizeCompanyName');
 
 const router = express.Router();
+
+const LISTED_MARKETS = new Set(['NASDAQ', 'NYSE', 'AMEX']);
+
+// The stock we already hold under an equivalent spelling of `symbol` ("BRK-B" for "BRK.B"),
+// or null. The UNIQUE constraint only catches the exact spelling. `exceptId` skips the row
+// being edited.
+async function findEquivalentStock(symbol, exceptId = null) {
+  const root = symbol.split(/[.-]/)[0];
+  const { rows } = await pool.query(
+    `SELECT id, stock_symbol FROM stocks WHERE stock_symbol = $1 OR stock_symbol LIKE $2 OR stock_symbol LIKE $3`,
+    [root, `${root}.%`, `${root}-%`]
+  );
+  return rows.find((r) => r.id !== Number(exceptId) && symbolsEquivalent(r.stock_symbol, symbol)) || null;
+}
 
 // Fire-and-forget: fetches company details + CUSIP for a freshly manually-added stock and
 // writes them in once they arrive, without making the add request wait on any of it. Only
@@ -18,6 +35,9 @@ async function autoFillNewStock(stock) {
   const [detailsResult, cusipResult] = await Promise.allSettled([
     fillCompanyDetails(pool, stock),
     lookupCusip(stock.stock_symbol, {
+      // A new add is often a new or recycled ticker, exactly where quantumonline (keyed by
+      // ticker) can still show the previous issuer - the name check in lib/cusipLookup.js.
+      companyName: stock.company_name,
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
     }),
   ]);
@@ -145,16 +165,48 @@ router.get('/by-symbol/:symbol', async (req, res, next) => {
   }
 });
 
-// GET /api/stocks/yahoo-lookup/AA - pre-fills the add form's company name / exchange from
-// Yahoo as soon as a symbol is typed. Read-only: never writes to the database.
+// GET /api/stocks/yahoo-lookup/AA - pre-fills the add form's company name / exchange as
+// soon as a symbol is typed. Read-only: never writes to the database. Same trust rules as
+// lib/checkStockStatus.js: for a symbol on NASDAQ Trader's official listing, the listing's
+// exchange wins and Yahoo's name is only used if it matches the listing's (Yahoo keeps a
+// recycled ticker's previous owner's name - DPU pre-filled as "DB Commodity Long ETN").
+// Listed symbols Yahoo won't return (closed-end funds it calls ETFs) still pre-fill from the
+// listing. Also reports an already-held equivalent spelling as `existing_symbol`.
 router.get('/yahoo-lookup/:symbol', async (req, res, next) => {
   try {
-    const found = await lookupStock(req.params.symbol.trim().toUpperCase());
-    res.json({ stock_symbol: found.stock_symbol, company_name: found.company_name, exchange: found.exchange });
-  } catch (err) {
-    if (err instanceof YahooLookupError) {
-      return res.status(404).json({ errors: [err.message] });
+    const symbol = req.params.symbol.trim().toUpperCase();
+    const existing = await findEquivalentStock(symbol);
+    if (existing) {
+      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: existing.stock_symbol });
     }
+
+    const listing = await getCachedListing().catch((err) => {
+      console.error(`[lookup] NASDAQ Trader listing unavailable: ${err.message}`);
+      return null;
+    });
+    const listed = listing && listing.get(symbol);
+
+    let yahoo = null;
+    try {
+      yahoo = await lookupStock(symbol);
+    } catch (err) {
+      if (!(err instanceof YahooLookupError)) throw err;
+    }
+
+    if (listed) {
+      const listingName = cleanSecurityName(listed.name);
+      return res.json({
+        stock_symbol: symbol,
+        company_name: yahoo && sameCompany(yahoo.company_name, listed.name) ? yahoo.company_name : listingName,
+        exchange: LISTED_MARKETS.has(listed.exchange) ? listed.exchange : (yahoo ? yahoo.exchange : listed.exchange),
+        source: 'nasdaq_trader',
+      });
+    }
+    if (yahoo) {
+      return res.json({ stock_symbol: symbol, company_name: yahoo.company_name, exchange: yahoo.exchange, source: 'yahoo' });
+    }
+    res.status(404).json({ errors: [`"${symbol}" not found on NASDAQ Trader or Yahoo Finance`] });
+  } catch (err) {
     next(err);
   }
 });
@@ -185,6 +237,11 @@ router.post('/', async (req, res, next) => {
     const exchange = req.body.exchange.trim();
     const detailFields = extractDetailFields(req.body);
 
+    const existing = await findEquivalentStock(stock_symbol);
+    if (existing) {
+      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: existing.stock_symbol });
+    }
+
     const columns = ['stock_symbol', 'company_name', 'exchange', 'source', ...Object.keys(detailFields)];
     const values = [stock_symbol, company_name, exchange, 'manual', ...Object.values(detailFields)];
     const placeholders = values.map((_, i) => `$${i + 1}`);
@@ -202,7 +259,7 @@ router.post('/', async (req, res, next) => {
     }
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ errors: ['stock_symbol already exists'] });
+      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: req.body.stock_symbol.trim().toUpperCase() });
     }
     next(err);
   }
@@ -225,6 +282,17 @@ router.put('/:id', async (req, res, next) => {
     return res.status(400).json({ errors: ['no fields to update'] });
   }
 
+  if (fields.stock_symbol) {
+    try {
+      const existing = await findEquivalentStock(fields.stock_symbol, id);
+      if (existing) {
+        return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: existing.stock_symbol });
+      }
+    } catch (err) {
+      return next(err);
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -240,7 +308,7 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) {
     await client.query('ROLLBACK');
     if (err.code === '23505') {
-      return res.status(409).json({ errors: ['stock_symbol already exists'] });
+      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: fields.stock_symbol });
     }
     next(err);
   } finally {
