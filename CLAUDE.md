@@ -32,7 +32,7 @@ PostgreSQL runs locally in WSL. The app connects over TCP (`localhost:5432`) wit
 
 ### Git
 
-The repo's `origin` is https://github.com/victor5566/update_stock_app (branch `main`). Pushes are done from a Windows-side shell (PowerShell), not WSL — the WSL environment has no GitHub credentials configured, but Windows git already has a cached credential for this account via Git Credential Manager.
+The repo's `origin` is https://github.com/victor5566/update_stock_app (branch `main`). Pushes work from either side. Windows git uses a cached HTTPS credential (Git Credential Manager). WSL (user `root`) has its own SSH key (`/root/.ssh/id_rsa`, RSA 4096, added to the victor5566 GitHub account on 2026-10-01) plus a WSL-only global rule `url."git@github.com:".insteadOf "https://github.com/"`, so WSL transparently uses SSH for the same `https://` remote URLs. Windows also has an SSH key (`C:\Users\victo\.ssh\id_rsa`, RSA 4096, added to GitHub 2026-10-01), but Windows git keeps using HTTPS - leave `origin` as the `https://` URL so both sides work without per-side remote config (`.git` is shared). A second remote, `levelfields` (https://github.com/infocast-tw/LevelFields, branch `dev`, merged via a local `levelfields-dev` branch), exists, but Claude Code's auto mode blocks pushing there as data exfiltration even with the user's in-chat consent - the user runs that push themselves.
 
 ### Routine data upkeep
 
