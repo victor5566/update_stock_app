@@ -9,7 +9,8 @@
 // QOL_DELAY_MS (default 500ms) apart - quantumonline.com is a small site, not an API.
 require('dotenv').config();
 const pool = require('../db');
-const { lookupCusip, hasSecContact } = require('../lib/cusipLookup');
+const { lookupCusip, findCusipConflict, hasSecContact } = require('../lib/cusipLookup');
+const { loadNasdaqTraderListing } = require('../lib/nasdaqTrader');
 
 const DELAY_MS = Number(process.env.QOL_DELAY_MS) || 500;
 
@@ -36,6 +37,15 @@ async function main() {
     }
   }
 
+  // Raw security names tell preferreds/notes/warrants apart from the common (see
+  // isNonCommonSecurity); without the listing they're only recognized by name/suffix.
+  let listing = null;
+  try {
+    listing = await loadNasdaqTraderListing();
+  } catch (err) {
+    console.log(`WARNING: NASDAQ Trader listing unavailable (${err.message}) - non-common securities only recognized by name.\n`);
+  }
+
   console.log(`Looking up CUSIP for ${stocks.length} stock(s) (SEC EDGAR, then quantumonline.com)...`);
 
   let filled = 0;
@@ -43,11 +53,15 @@ async function main() {
     const stock = stocks[i];
     const { cusip, source } = await lookupCusip(stock.stock_symbol, {
       companyName: stock.company_name,
+      listing,
       onSourceError: (src, err) => console.log(`  (${src} lookup failed for ${stock.stock_symbol}: ${err.message})`),
     });
+    const conflict = cusip && await findCusipConflict(pool, cusip, { stockId: stock.id });
 
     if (!cusip) {
       console.log(`SKIP ${stock.stock_symbol}: not found on either source`);
+    } else if (conflict) {
+      console.log(`SKIP ${stock.stock_symbol}: ${cusip} (${source}) already belongs to ${conflict.stock_symbol} (${conflict.company_name})`);
     } else {
       await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusip, stock.id]);
       console.log(`FILLED ${stock.stock_symbol}: ${cusip} (${source})`);

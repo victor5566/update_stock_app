@@ -3,7 +3,7 @@ const pool = require('../db');
 const { applyStockUpdate } = require('../lib/applyStockUpdate');
 const { isValidCusip } = require('../lib/validateCusip');
 const { fillCompanyDetails } = require('../lib/fillCompanyDetails');
-const { lookupCusip } = require('../lib/cusipLookup');
+const { lookupCusip, findCusipConflict } = require('../lib/cusipLookup');
 const { lookupStock, YahooLookupError, symbolsEquivalent } = require('../lib/yahoo');
 const { getCachedListing } = require('../lib/nasdaqTrader');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
@@ -33,12 +33,15 @@ async function findEquivalentStock(symbol, exceptId = null) {
 // that bare row into a fully-populated one a few seconds later, the same data
 // scripts/fill-company-details.js and scripts/fill-cusip.js would have produced by hand.
 async function autoFillNewStock(stock) {
+  // Raw listing names let lib/cusipLookup.js tell a preferred/note/warrant from the common.
+  const listing = await getCachedListing().catch(() => null);
   const [detailsResult, cusipResult] = await Promise.allSettled([
     fillCompanyDetails(pool, stock),
     lookupCusip(stock.stock_symbol, {
       // A new add is often a new or recycled ticker, exactly where quantumonline (keyed by
       // ticker) can still show the previous issuer - the name check in lib/cusipLookup.js.
       companyName: stock.company_name,
+      listing: listing || undefined,
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
     }),
   ]);
@@ -50,9 +53,13 @@ async function autoFillNewStock(stock) {
   }
 
   if (cusipResult.status === 'fulfilled') {
-    if (cusipResult.value.cusip) {
-      await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusipResult.value.cusip, stock.id]);
-      console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${cusipResult.value.source})`);
+    const { cusip, source } = cusipResult.value;
+    const conflict = cusip && await findCusipConflict(pool, cusip, { stockId: stock.id });
+    if (conflict) {
+      console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${cusip} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
+    } else if (cusip) {
+      await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusip, stock.id]);
+      console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
     }
   } else {
     console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusipResult.reason.message}`);
