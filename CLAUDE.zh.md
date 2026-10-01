@@ -32,7 +32,7 @@ PostgreSQL 是在 WSL 本機執行。App 是透過 TCP（`localhost:5432`）用�
 
 ### Git
 
-這個 repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `main`）。推送是在 Windows 端的 shell（PowerShell）執行，不是從 WSL——WSL 環境裡沒有設定 GitHub 登入資訊，但 Windows 端的 git 已經透過 Git Credential Manager 快取了這個帳號的憑證。
+這個 repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `main`）。現在兩邊都能推送。Windows 端的 git 用 Git Credential Manager 快取的 HTTPS 憑證。WSL（使用者 `root`）有自己的 SSH 金鑰（`/root/.ssh/id_rsa`，RSA 4096，2026-10-01 已加到 victor5566 的 GitHub 帳號），加上一條只在 WSL 生效的全域規則 `url."git@github.com:".insteadOf "https://github.com/"`，所以 WSL 會自動把同樣的 `https://` remote 網址改走 SSH。Windows 也有 SSH 金鑰（`C:\Users\victo\.ssh\id_rsa`，RSA 4096，2026-10-01 已加到 GitHub），但 Windows 的 git 仍用 HTTPS——`origin` 維持 `https://` 網址，兩邊都不用各自設定 remote 就能用（`.git` 是共用的）。另外有第二個 remote `levelfields`（https://github.com/infocast-tw/LevelFields，分支 `dev`，透過本機的 `levelfields-dev` 分支合併），但 Claude Code 的自動模式會把推送到那裡判定為資料外流而擋下，即使使用者在對話中同意也一樣——這個推送由使用者自己執行。
 
 ### 例行資料維護
 
