@@ -34,7 +34,33 @@ const TRANSLATIONS = {
     yahooLookupRunning: (symbol) => `正在從 Yahoo 查詢 ${symbol}…`,
     yahooLookupFilled: (symbol, source) => `已從${source === 'nasdaq_trader' ? ' NASDAQ Trader 官方清單' : ' Yahoo'}帶入 ${symbol} 的公司名稱與交易市場，請確認後新增`,
     yahooLookupNotFound: (symbol) => `NASDAQ Trader 官方清單與 Yahoo 都查無 ${symbol}，請手動填寫公司名稱與交易市場`,
-    addedStock: (symbol) => `已新增 ${symbol}，公司資訊會在幾秒內自動補齊。查看：`,
+    addedStock: (symbol) => `已新增 ${symbol}。查看：`,
+    addingStock: (symbol) => `正在新增 ${symbol}，並即時查詢公司資料與 CUSIP（約需數秒）…`,
+    addedAllFound: (symbol) => `已新增 ${symbol}，公司資料與 CUSIP 均已取得。查看：`,
+    addedSomeMissing: (symbol) => `已新增 ${symbol}，但部分資料目前無法取得，原因如下。查看：`,
+    addedPending: (symbol) => `已新增 ${symbol}。資料來源回應較慢，查詢仍在背景進行，稍後請到詳細頁查看結果：`,
+    afDetailsLabel: '公司資料（產業、地址、官網、CEO、簡介）：',
+    afDetailsNotFound: 'Yahoo Finance 目前沒有這檔股票的公司資料。新上市股票常見，Yahoo 通常數小時到數天後才會建立。',
+    afCusipLabel: 'CUSIP：',
+    afCusipNoSource: '所有來源都查不到——',
+    afCusipConflict: (cusip, source, symbol) => `查到 ${cusip}（來源 ${source}），但這個號碼已屬於 ${symbol}。兩檔股票不可能共用同一個 CUSIP，為避免寫入錯誤資料而未寫入，需人工確認哪一邊正確。`,
+    afError: (message) => `查詢失敗（${message}），可能是網路或來源網站暫時異常。`,
+    afReasons: {
+      no_contact: () => '未設定 SEC_EDGAR_CONTACT，無法查詢 SEC',
+      no_cik: () => '此代碼不在 SEC 的公司代碼清單中（外國公司、OTC 股票，或剛上市尚未收錄）',
+      skipped_non_common: () => '特別股／債券／權證／單位的 CUSIP 不會出現在 SEC 13G 申報中，因此不查 SEC',
+      skipped_multi_class: () => '此公司有多個股票類別，SEC 13G 申報無法區分是哪一類，因此不查 SEC',
+      no_13g: () => '尚無關於此公司的 13G 持股申報（新上市公司，或沒有機構持股超過 5%）',
+      unusable_13g: () => '有 13G 申報，但申報的發行人名稱或 CUSIP 無法確認',
+      conflicting_13g: () => '13G 申報中的 CUSIP 彼此不一致，無法判斷哪個正確',
+      not_found: () => '查無此代碼',
+      name_mismatch: (detail) => `頁面上的證券名稱${detail ? `（${detail}）` : ''}與公司名稱不符，可能是此代碼前一家公司的資料`,
+      no_cusip_on_page: () => '頁面上沒有 CUSIP',
+      invalid_check_digit: () => '查到的 CUSIP 檢查碼錯誤',
+      error: (detail) => `連線失敗（${detail}）`,
+    },
+    afRetryAt: (time) => `系統會在 ${time} 自動重新查詢，屆時重新整理詳細頁即可看到結果。`,
+    afRetriesExhausted: '自動重試已結束，仍無法取得；可稍後執行 scripts/fill-company-details.js 或 scripts/fill-cusip.js。',
     locale: 'zh-TW',
     renameSectionTitle: '修改公司名稱',
     renameCurrentName: '目前公司名稱',
@@ -113,7 +139,33 @@ const TRANSLATIONS = {
     yahooLookupRunning: (symbol) => `Looking up ${symbol} on Yahoo…`,
     yahooLookupFilled: (symbol, source) => `Filled in ${symbol}'s company name and market from ${source === 'nasdaq_trader' ? "NASDAQ Trader's official listing" : 'Yahoo'} - check them, then add`,
     yahooLookupNotFound: (symbol) => `${symbol} not found on NASDAQ Trader's listing or Yahoo - fill in the company name and market manually`,
-    addedStock: (symbol) => `Added ${symbol}; company info fills in automatically within a few seconds. View: `,
+    addedStock: (symbol) => `Added ${symbol}. View: `,
+    addingStock: (symbol) => `Adding ${symbol} and looking up its company info and CUSIP (takes a few seconds)…`,
+    addedAllFound: (symbol) => `Added ${symbol}; company info and CUSIP were both found. View: `,
+    addedSomeMissing: (symbol) => `Added ${symbol}, but some data isn't available yet - reasons below. View: `,
+    addedPending: (symbol) => `Added ${symbol}. The data sources are slow to answer; the lookup continues in the background - check the detail page shortly: `,
+    afDetailsLabel: 'Company info (sector, address, website, CEO, description): ',
+    afDetailsNotFound: "Yahoo Finance has no company profile for this stock yet. Common for new listings - Yahoo usually adds one within hours to days.",
+    afCusipLabel: 'CUSIP: ',
+    afCusipNoSource: 'no source had it - ',
+    afCusipConflict: (cusip, source, symbol) => `found ${cusip} (from ${source}), but that number already belongs to ${symbol}. Two stocks can't share a CUSIP, so it wasn't written - someone needs to check which one is right.`,
+    afError: (message) => `lookup failed (${message}) - the network or the source site may be having trouble.`,
+    afReasons: {
+      no_contact: () => 'SEC_EDGAR_CONTACT is not set, so SEC cannot be queried',
+      no_cik: () => "this symbol isn't in SEC's company ticker list (foreign company, OTC stock, or too new to be listed)",
+      skipped_non_common: () => "preferreds / notes / warrants / units have CUSIPs that SEC 13G filings don't carry, so SEC was skipped",
+      skipped_multi_class: () => "this company has several share classes and its 13G filings don't say which, so SEC was skipped",
+      no_13g: () => 'no 13G ownership filing about this company yet (newly listed, or no institution holds over 5%)',
+      unusable_13g: () => "13G filings exist, but their issuer name or CUSIP couldn't be confirmed",
+      conflicting_13g: () => "the 13G filings disagree on the CUSIP, so it can't be told which is right",
+      not_found: () => 'symbol not found',
+      name_mismatch: (detail) => `the security name on the page${detail ? ` (${detail})` : ''} doesn't match the company - probably the symbol's previous owner`,
+      no_cusip_on_page: () => 'the page has no CUSIP',
+      invalid_check_digit: () => 'the CUSIP found has a wrong check digit',
+      error: (detail) => `request failed (${detail})`,
+    },
+    afRetryAt: (time) => `It will be looked up again automatically at ${time}; refresh the detail page then to see the result.`,
+    afRetriesExhausted: 'Automatic retries are over and it is still missing; run scripts/fill-company-details.js or scripts/fill-cusip.js later.',
     locale: 'en-US',
     renameSectionTitle: 'Update Company Name',
     renameCurrentName: 'Current Company Name',
@@ -310,8 +362,9 @@ function clearError() {
   formError.textContent = '';
 }
 
-// Neutral (non-error) message under the add form; `symbol` appends a link to its detail page.
-function showHint(message, symbol) {
+// Neutral (non-error) message under the add form; `symbol` appends a link to its detail page,
+// and each of `lines` goes on a line of its own below (the add's "why is this missing" list).
+function showHint(message, symbol, lines = []) {
   const parts = [message];
   if (symbol) {
     const link = document.createElement('a');
@@ -319,13 +372,54 @@ function showHint(message, symbol) {
     link.textContent = symbol;
     parts.push(link);
   }
+  for (const line of lines) parts.push(document.createElement('br'), line);
   formHint.replaceChildren(...parts);
+  formHint.classList.toggle('form-hint-warn', lines.length > 0);
   formHint.hidden = false;
 }
 
 function clearHint() {
   formHint.hidden = true;
   formHint.textContent = '';
+  formHint.classList.remove('form-hint-warn');
+}
+
+// Lines explaining what an add's lookup couldn't fill and why - `report` is the `autofill`
+// object from POST /api/stocks (see autoFillNewStock in routes/stocks.js). stock.js keeps
+// its own copy for the detail page.
+function autoFillProblems(report) {
+  const lines = [];
+  if (!report || report.pending) return lines;
+  const { details, cusip } = report;
+  if (details.status === 'not_found') lines.push(t('afDetailsLabel') + t('afDetailsNotFound'));
+  else if (details.status === 'error') lines.push(t('afDetailsLabel') + t('afError')(details.message));
+  if (cusip.status === 'conflict') {
+    lines.push(t('afCusipLabel') + t('afCusipConflict')(cusip.cusip, cusip.source, cusip.conflict_symbol));
+  } else if (cusip.status === 'error') {
+    lines.push(t('afCusipLabel') + t('afError')(cusip.message));
+  } else if (cusip.status === 'not_found') {
+    const reasons = (cusip.reasons || []).map((r) => {
+      const describe = t('afReasons')[r.code];
+      return `${r.source}: ${describe ? describe(r.detail) : r.code}`;
+    });
+    lines.push(t('afCusipLabel') + t('afCusipNoSource') + reasons.join('; '));
+  }
+  if (lines.length && report.next_retry_at) {
+    const time = new Date(report.next_retry_at).toLocaleTimeString(t('locale'), { hour: '2-digit', minute: '2-digit' });
+    lines.push(t('afRetryAt')(time));
+  } else if (lines.length && report.retries_exhausted) {
+    lines.push(t('afRetriesExhausted'));
+  }
+  return lines;
+}
+
+function showAddResult(stock) {
+  const report = stock.autofill;
+  const symbol = stock.stock_symbol;
+  if (!report) return showHint(t('addedStock')(symbol), symbol);
+  if (report.pending) return showHint(t('addedPending')(symbol), symbol);
+  const problems = autoFillProblems(report);
+  showHint(t(problems.length ? 'addedSomeMissing' : 'addedAllFound')(symbol), symbol, problems);
 }
 
 // What the last Yahoo lookup put into the name/market inputs, so a later lookup (symbol
@@ -1090,13 +1184,27 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  const res = await fetch(isEdit ? `${API_BASE}/${id}` : API_BASE, {
-    method: isEdit ? 'PUT' : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  // An add waits for the company-info / CUSIP lookup (a few seconds), so say so and block a
+  // second click meanwhile.
+  if (!isEdit) showHint(t('addingStock')(upperSymbol));
+  submitBtn.disabled = true;
+  let res;
+  try {
+    res = await fetch(isEdit ? `${API_BASE}/${id}` : API_BASE, {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    clearHint();
+    showError(t('operationFailed'));
+    return;
+  } finally {
+    submitBtn.disabled = false;
+  }
 
   const data = await res.json().catch(() => ({}));
+  if (!res.ok) clearHint();
 
   if (!res.ok) {
     if (res.status === 409) {
@@ -1109,7 +1217,7 @@ form.addEventListener('submit', async (e) => {
   }
 
   resetForm();
-  if (!isEdit) showHint(t('addedStock')(data.stock_symbol), data.stock_symbol);
+  if (!isEdit) showAddResult(data);
   fetchStocks();
   fetchHistory();
   fetchSymbolHistory();

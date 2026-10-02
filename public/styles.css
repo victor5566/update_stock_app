@@ -9,6 +9,8 @@
   --accent-hover: #1d4ed8;
   --danger: #dc2626;
   --danger-hover: #b91c1c;
+  --warn-bg: #fff8e1;
+  --warn-border: #f0d58a;
 }
 
 * {
@@ -167,6 +169,28 @@ button {
   margin: 0;
 }
 
+/* An add that came back with data missing: the reasons list under the add form, and the
+   same explanation on the detail page. */
+.form-hint-warn,
+.autofill-notice {
+  color: var(--text);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  line-height: 1.6;
+}
+
+.autofill-notice {
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.autofill-notice ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
 .list-toolbar {
   display: flex;
   justify-content: space-between;
@@ -318,6 +342,8 @@ th {
     --border: #2d323c;
     --text: #e6e8eb;
     --muted: #9aa3af;
+    --warn-bg: #2d2610;
+    --warn-border: #6b5a1e;
   }
   .btn-edit {
     background: #1e2540;

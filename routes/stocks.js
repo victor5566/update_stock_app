@@ -26,44 +26,136 @@ async function findEquivalentStock(symbol, exceptId = null) {
   return rows.find((r) => r.id !== Number(exceptId) && symbolsEquivalent(r.stock_symbol, symbol)) || null;
 }
 
-// Fire-and-forget: fetches company details + CUSIP for a freshly manually-added stock and
-// writes them in once they arrive, without making the add request wait on any of it. Only
-// called when the add didn't already specify any detail fields itself (see the POST handler)
-// - the web form only ever submits stock_symbol/company_name/exchange, so this is what turns
-// that bare row into a fully-populated one a few seconds later, the same data
+// Fetches company details + CUSIP for a freshly manually-added stock and writes them in.
+// Only called when the add didn't already specify any detail fields itself (see the POST
+// handler) - the web form only ever submits stock_symbol/company_name/exchange, so this is
+// what turns that bare row into a fully-populated one, the same data
 // scripts/fill-company-details.js and scripts/fill-cusip.js would have produced by hand.
-async function autoFillNewStock(stock) {
+// The POST waits for the first pass (per the user: an add should come back with everything
+// it can find, and say on screen why anything is missing) - the report below is that "why".
+//
+// A brand-new listing often isn't in the sources yet when it's added (VYLR: Yahoo had no
+// profile at add time, a full one later the same day; SEC has no 13G yet), so whatever is
+// still missing is retried after each of AUTO_FILL_RETRY_MS. In-process only - a server
+// restart drops pending retries, which the fill-* scripts then catch on their next run.
+const AUTO_FILL_RETRY_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000];
+// The add answers after this even if a source is slow; the lookup carries on regardless.
+const ADD_LOOKUP_TIMEOUT_MS = 20 * 1000;
+
+// stock id -> the latest auto-fill report, so the detail page can say why a field is empty
+// and when it's retried. In-process like the retries themselves.
+const autoFillStatus = new Map();
+
+// Report shape (sent to the UI as `autofill`):
+//   details: { status: 'filled' | 'not_found' | 'error' | 'skipped', message? }
+//   cusip:   { status: 'filled' | 'not_found' | 'conflict' | 'error' | 'skipped',
+//              cusip?, source?, reasons? (from lookupCusip), conflict_symbol?, message? }
+//   attempts, next_retry_at (ISO) | null, retries_exhausted
+async function autoFillNewStock(stock, attempt = 0, todo = { details: true, cusip: true }) {
+  const pass = await autoFillOnce(stock, todo);
+  const previous = autoFillStatus.get(stock.id) || {};
+  const report = {
+    // A part that wasn't re-tried keeps its earlier result.
+    details: todo.details ? pass.details : previous.details || { status: 'skipped' },
+    cusip: todo.cusip ? pass.cusip : previous.cusip || { status: 'skipped' },
+    attempts: attempt + 1,
+    next_retry_at: null,
+    retries_exhausted: false,
+  };
+
+  // Retry only what a later try could change: "not found yet" or a failed request. A CUSIP
+  // conflict needs a human, not another lookup.
+  const next = {
+    details: ['not_found', 'error'].includes(report.details.status),
+    cusip: ['not_found', 'error'].includes(report.cusip.status),
+  };
+  if (next.details || next.cusip) {
+    if (attempt < AUTO_FILL_RETRY_MS.length) {
+      report.next_retry_at = new Date(Date.now() + AUTO_FILL_RETRY_MS[attempt]).toISOString();
+      setTimeout(() => retryAutoFill(stock.id, attempt + 1, next), AUTO_FILL_RETRY_MS[attempt]).unref();
+    } else {
+      report.retries_exhausted = true;
+      console.log(`[auto-fill] ${stock.stock_symbol}: still missing ${[next.details && 'details', next.cusip && 'cusip'].filter(Boolean).join(' + ')} after ${attempt + 1} tries - left for scripts/fill-*.js`);
+    }
+  }
+  autoFillStatus.set(stock.id, report);
+  return report;
+}
+
+async function retryAutoFill(stockId, attempt, todo) {
+  try {
+    // Re-read: the stock may have been deleted, renamed or filled in by hand meanwhile.
+    const { rows } = await pool.query('SELECT id, stock_symbol, company_name, sector, description, cusips FROM stocks WHERE id = $1', [stockId]);
+    const current = rows[0];
+    if (!current) {
+      autoFillStatus.delete(stockId);
+      return;
+    }
+    const stillTodo = {
+      details: todo.details && current.sector == null && current.description == null,
+      cusip: todo.cusip && current.cusips == null,
+    };
+    if (!stillTodo.details && !stillTodo.cusip) {
+      autoFillStatus.delete(stockId); // filled some other way - nothing left to explain
+      return;
+    }
+    await autoFillNewStock(current, attempt, stillTodo);
+  } catch (err) {
+    console.error(`[auto-fill] stock ${stockId}: retry failed - ${err.message}`);
+  }
+}
+
+// One pass; resolves to { details, cusip } in the report shape above.
+async function autoFillOnce(stock, todo) {
   // Raw listing names let lib/cusipLookup.js tell a preferred/note/warrant from the common.
-  const listing = await getCachedListing().catch(() => null);
+  const listing = todo.cusip ? await getCachedListing().catch(() => null) : null;
   const [detailsResult, cusipResult] = await Promise.allSettled([
-    fillCompanyDetails(pool, stock),
-    lookupCusip(stock.stock_symbol, {
+    todo.details ? fillCompanyDetails(pool, stock) : Promise.resolve(null),
+    todo.cusip ? lookupCusip(stock.stock_symbol, {
       // A new add is often a new or recycled ticker, exactly where quantumonline (keyed by
       // ticker) can still show the previous issuer - the name check in lib/cusipLookup.js.
       companyName: stock.company_name,
       listing: listing || undefined,
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
-    }),
+    }) : Promise.resolve(null),
   ]);
 
-  if (detailsResult.status === 'fulfilled') {
-    if (detailsResult.value) console.log(`[auto-fill] ${stock.stock_symbol}: company details filled`);
-  } else {
-    console.error(`[auto-fill] ${stock.stock_symbol}: company details failed - ${detailsResult.reason.message}`);
+  let details = { status: 'skipped' };
+  if (todo.details) {
+    if (detailsResult.status === 'rejected') {
+      details = { status: 'error', message: detailsResult.reason.message };
+      console.error(`[auto-fill] ${stock.stock_symbol}: company details failed - ${details.message}`);
+    } else if (detailsResult.value) {
+      details = { status: 'filled' };
+      console.log(`[auto-fill] ${stock.stock_symbol}: company details filled`);
+    } else {
+      details = { status: 'not_found' };
+      console.log(`[auto-fill] ${stock.stock_symbol}: no company details on Yahoo yet`);
+    }
   }
 
-  if (cusipResult.status === 'fulfilled') {
-    const { cusip, source } = cusipResult.value;
-    const conflict = cusip && await findCusipConflict(pool, cusip, { stockId: stock.id });
-    if (conflict) {
-      console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${cusip} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
-    } else if (cusip) {
-      await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusip, stock.id]);
-      console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
+  let cusip = { status: 'skipped' };
+  if (todo.cusip) {
+    if (cusipResult.status === 'rejected') {
+      cusip = { status: 'error', message: cusipResult.reason.message };
+      console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusip.message}`);
+    } else {
+      const { cusip: found, source, reasons } = cusipResult.value;
+      const conflict = found && await findCusipConflict(pool, found, { stockId: stock.id });
+      if (conflict) {
+        cusip = { status: 'conflict', cusip: found, source, conflict_symbol: conflict.stock_symbol };
+        console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
+      } else if (found) {
+        await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [found, stock.id]);
+        cusip = { status: 'filled', cusip: found, source };
+        console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
+      } else {
+        cusip = { status: 'not_found', reasons };
+        console.log(`[auto-fill] ${stock.stock_symbol}: no cusip found yet (${reasons.map((r) => `${r.source}: ${r.code}`).join('; ')})`);
+      }
     }
-  } else {
-    console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusipResult.reason.message}`);
   }
+  return { details, cusip };
 }
 
 const DETAIL_FIELDS = [
@@ -193,7 +285,10 @@ router.get('/by-symbol/:symbol', async (req, res, next) => {
     if (!result.rows.length) {
       return res.status(404).json({ errors: ['stock not found'] });
     }
-    res.json(result.rows[0]);
+    // For a stock added in this server's lifetime whose auto-fill left something empty, the
+    // detail page explains why (see autoFillNewStock).
+    const autofill = autoFillStatus.get(result.rows[0].id);
+    res.json(autofill ? { ...result.rows[0], autofill } : result.rows[0]);
   } catch (err) {
     next(err);
   }
@@ -286,11 +381,23 @@ router.post('/', async (req, res, next) => {
       values
     );
     const inserted = result.rows[0];
-    res.status(201).json(inserted);
-
-    if (!Object.keys(detailFields).length) {
-      autoFillNewStock(inserted).catch((err) => console.error(`[auto-fill] ${inserted.stock_symbol}: ${err.message}`));
+    if (Object.keys(detailFields).length) {
+      return res.status(201).json(inserted);
     }
+
+    // Wait for the first lookup pass so the response carries the filled row and, for
+    // anything still missing, why (`autofill`). A slow source only delays it up to
+    // ADD_LOOKUP_TIMEOUT_MS; the pass then finishes (and retries) in the background.
+    const filling = autoFillNewStock(inserted);
+    filling.catch((err) => console.error(`[auto-fill] ${inserted.stock_symbol}: ${err.message}`));
+    let timer;
+    const autofill = await Promise.race([
+      filling.catch(() => null),
+      new Promise((resolve) => { timer = setTimeout(() => resolve({ pending: true }), ADD_LOOKUP_TIMEOUT_MS); }),
+    ]);
+    clearTimeout(timer);
+    const { rows } = await pool.query('SELECT * FROM stocks WHERE id = $1', [inserted.id]);
+    res.status(201).json({ ...(rows[0] || inserted), autofill });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: req.body.stock_symbol.trim().toUpperCase() });
