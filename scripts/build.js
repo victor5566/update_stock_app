@@ -41,7 +41,17 @@ for (const dep of Object.keys(dependencies)) {
   }
 }
 
-// 4. Database settings: a warning only, since they may come from the environment instead of .env.
+// 4. .env must be UTF-8: dotenv reads a UTF-16 file (what Windows PowerShell 5.1's `>` writes) as
+// no settings at all, and the app then can't reach the database.
+const envPath = path.join(ROOT, '.env');
+if (fs.existsSync(envPath)) {
+  const head = fs.readFileSync(envPath).subarray(0, 2);
+  if ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff)) {
+    errors.push('.env is saved as UTF-16 - save it as UTF-8 (e.g. write it from WSL/bash, not PowerShell 5.1 `>`)');
+  }
+}
+
+// 5. Database settings: a warning only, since they may come from the environment instead of .env.
 try {
   require('dotenv').config({ path: path.join(ROOT, '.env') });
 } catch {
