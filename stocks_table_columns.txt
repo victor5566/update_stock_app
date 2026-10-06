@@ -1,0 +1,21 @@
+Table: stocks - column definitions
+
+Column            Type                           Description
+----------------  -----------------------------  ------------------------------------------------------------
+id                SERIAL, primary key
+stock_symbol      VARCHAR(50), unique, required  Stock symbol in exchange format, e.g. BRK.B
+company_name      VARCHAR(255), required         Company name
+exchange          VARCHAR(255), required         Market: NASDAQ / NYSE / AMEX / OTC
+source            VARCHAR(20), required          Data source: manual / yahoo / excel_import / nasdaq_trader
+isdelisted        BOOLEAN, default false         Whether the stock is delisted. Delisted stocks are flagged with this instead of being deleted
+category          VARCHAR(255)                   Category, manual entry only
+cusips            VARCHAR(255)                   CUSIP, validated with the check digit before writing
+sector            VARCHAR(255)                   Sector
+industry          VARCHAR(255)                   Industry
+currency          VARCHAR(255), default USD      Currency, always USD
+company_location  VARCHAR(255)                   Full company address
+urll              VARCHAR(255)                   Company website
+description       VARCHAR(10000)                 Company description
+ceo               VARCHAR(500)                   Chief executive officer (CEO)
+created_at        TIMESTAMPTZ                    Creation time
+updated_at        TIMESTAMPTZ                    Last update time

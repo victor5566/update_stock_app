@@ -3,10 +3,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const stocksRouter = require('./routes/stocks');
-const historyRouter = require('./routes/history');
-const symbolHistoryRouter = require('./routes/symbolHistory');
-const removalCandidatesRouter = require('./routes/removalCandidates');
-const deletionLogRouter = require('./routes/deletionLog');
+const monitorRouter = require('./routes/monitor');
 
 const app = express();
 
@@ -15,15 +12,12 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/stocks', stocksRouter);
-app.use('/api/company-name-history', historyRouter);
-app.use('/api/stock-symbol-history', symbolHistoryRouter);
-app.use('/api/removal-candidates', removalCandidatesRouter);
-app.use('/api/stock-deletion-log', deletionLogRouter);
+app.use('/api/monitor', monitorRouter);
 
-// Per-stock detail page, e.g. /aapl - falls through here only when express.static above
-// found no matching file. The regex (single path segment, symbol-shaped) keeps this from
-// swallowing /api/* or any other multi-segment path.
-app.get(/^\/[A-Za-z.-]{1,50}$/, (req, res) => {
+// Per-stock detail page, e.g. /aapl or /000001.sz - falls through here only when
+// express.static above found no matching file. The regex (single path segment) keeps this
+// from swallowing /api/* or any other multi-segment path.
+app.get(/^\/[^/]{1,150}$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'stock.html'));
 });
 
@@ -35,4 +29,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Stock symbol manager running at http://localhost:${PORT}`);
+  monitorRouter.scheduleDaily();
 });

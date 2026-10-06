@@ -9,19 +9,24 @@ const { getCachedListing } = require('../lib/nasdaqTrader');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
 const { sameCompany } = require('../lib/normalizeCompanyName');
 const { EXPORT_COLUMNS, toCsv } = require('../lib/stockCsv');
+const { TABLE, ID, SELECT_COLUMNS, writeColumn, isBlank, PREFERRED_ORDER } = require('../lib/stockTable');
 
 const router = express.Router();
 
 const LISTED_MARKETS = new Set(['NASDAQ', 'NYSE', 'AMEX']);
 
-// The stock we already hold under an equivalent spelling of `symbol` ("BRK-B" for "BRK.B"),
-// or null. The UNIQUE constraint only catches the exact spelling. `exceptId` skips the row
-// being edited.
+const escapeLike = (str) => str.replace(/[\\%_]/g, '\\$&');
+
+// The live stock we already hold under `symbol` or an equivalent spelling ("BRK-B" for
+// "BRK.B"), or null. Delisted rows don't block: the table keeps a recycled ticker's old row
+// next to the new owner's. `exceptId` skips the row being edited.
 async function findEquivalentStock(symbol, exceptId = null) {
   const root = symbol.split(/[.-]/)[0];
   const { rows } = await pool.query(
-    `SELECT id, stock_symbol FROM stocks WHERE stock_symbol = $1 OR stock_symbol LIKE $2 OR stock_symbol LIKE $3`,
-    [root, `${root}.%`, `${root}-%`]
+    `SELECT ${ID} AS id, stock_symbol FROM ${TABLE}
+     WHERE (stock_symbol = $1 OR stock_symbol LIKE $2 OR stock_symbol LIKE $3)
+       AND NOT coalesce(isdelisted, false)`,
+    [root, `${escapeLike(root)}.%`, `${escapeLike(root)}-%`]
   );
   return rows.find((r) => r.id !== Number(exceptId) && symbolsEquivalent(r.stock_symbol, symbol)) || null;
 }
@@ -84,16 +89,19 @@ async function autoFillNewStock(stock, attempt = 0, todo = { details: true, cusi
 
 async function retryAutoFill(stockId, attempt, todo) {
   try {
-    // Re-read: the stock may have been deleted, renamed or filled in by hand meanwhile.
-    const { rows } = await pool.query('SELECT id, stock_symbol, company_name, sector, description, cusips FROM stocks WHERE id = $1', [stockId]);
+    // Re-read: the stock may have been renamed or filled in by hand meanwhile.
+    const { rows } = await pool.query(
+      `SELECT ${ID} AS id, stock_symbol, company_name, sector, description, cusips FROM ${TABLE} WHERE ${ID} = $1`,
+      [stockId]
+    );
     const current = rows[0];
     if (!current) {
       autoFillStatus.delete(stockId);
       return;
     }
     const stillTodo = {
-      details: todo.details && current.sector == null && current.description == null,
-      cusip: todo.cusip && current.cusips == null,
+      details: todo.details && isBlank(current.sector) && isBlank(current.description),
+      cusip: todo.cusip && isBlank(current.cusips),
     };
     if (!stillTodo.details && !stillTodo.cusip) {
       autoFillStatus.delete(stockId); // filled some other way - nothing left to explain
@@ -146,7 +154,7 @@ async function autoFillOnce(stock, todo) {
         cusip = { status: 'conflict', cusip: found, source, conflict_symbol: conflict.stock_symbol };
         console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
       } else if (found) {
-        await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [found, stock.id]);
+        await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [found, stock.id]);
         cusip = { status: 'filled', cusip: found, source };
         console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
       } else {
@@ -163,14 +171,17 @@ const DETAIL_FIELDS = [
   'currency', 'company_location', 'urll', 'description', 'ceo',
 ];
 
+// company_profiles spans many markets: "000001.SZ", "3-Jun.DE", "^GSPC", "ACIC_old".
+const SYMBOL_PATTERN = /^[A-Za-z0-9.\-_^=& ]{1,50}$/;
+
 function validateStockInput({ stock_symbol, company_name, exchange }, { partial = false } = {}) {
   const errors = [];
 
   if (!partial || stock_symbol !== undefined) {
     if (!stock_symbol || typeof stock_symbol !== 'string' || !stock_symbol.trim()) {
       errors.push('stock_symbol is required');
-    } else if (!/^[A-Za-z.\-]{1,50}$/.test(stock_symbol.trim())) {
-      errors.push('stock_symbol must be 1-50 letters (may include "." or "-")');
+    } else if (!SYMBOL_PATTERN.test(stock_symbol.trim())) {
+      errors.push('stock_symbol must be 1-50 letters/digits (may include . - _ ^ = & or spaces)');
     }
   }
 
@@ -215,9 +226,9 @@ function extractDetailFields(body) {
   return fields;
 }
 
-// WHERE clause for the stock list's filters (?market=&q=&source=). Shared by the list and
-// its CSV export so the export is always exactly what the list shows.
-function buildStockFilter({ market, q, source }) {
+// WHERE clause for the stock list's filters (?market=&q=). Shared by the list and its CSV
+// export so the export is always exactly what the list shows.
+function buildStockFilter({ market, q }) {
   const conditions = [];
   const params = [];
 
@@ -226,12 +237,8 @@ function buildStockFilter({ market, q, source }) {
     conditions.push(`exchange = $${params.length}`);
   }
   if (q) {
-    params.push(`%${q}%`);
+    params.push(`%${escapeLike(q)}%`);
     conditions.push(`(stock_symbol ILIKE $${params.length} OR company_name ILIKE $${params.length})`);
-  }
-  if (source) {
-    params.push(source);
-    conditions.push(`source = $${params.length}`);
   }
 
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
@@ -244,7 +251,7 @@ router.get('/export.csv', async (req, res, next) => {
   try {
     const { where, params } = buildStockFilter(req.query);
     const result = await pool.query(
-      `SELECT ${EXPORT_COLUMNS.join(', ')} FROM stocks ${where} ORDER BY stock_symbol ASC`,
+      `SELECT ${EXPORT_COLUMNS.join(', ')} FROM ${TABLE} ${where} ORDER BY stock_symbol ASC, ${ID} ASC`,
       params
     );
     const nameParts = ['stocks', req.query.market || 'all', req.query.q, new Date().toISOString().slice(0, 10)]
@@ -258,15 +265,53 @@ router.get('/export.csv', async (req, res, next) => {
   }
 });
 
-// GET /api/stocks?market=NASDAQ&q=apple&source=manual
+const MAX_PAGE_SIZE = 100;
+
+// GET /api/stocks?market=NASDAQ&q=apple&page=1&pageSize=15 - one page of the stock list.
+// The table is far too big (~79k rows) to send whole, so it's paginated here, not in the
+// browser. Answers { rows, total, page, pageSize }.
 router.get('/', async (req, res, next) => {
   try {
     const { where, params } = buildStockFilter(req.query);
-    const orderBy = req.query.source ? 'created_at DESC' : 'stock_symbol ASC';
+    const pageSize = Math.min(Math.max(1, Number.parseInt(req.query.pageSize, 10) || 15), MAX_PAGE_SIZE);
+    const total = Number((await pool.query(`SELECT count(*) FROM ${TABLE} ${where}`, params)).rows[0].count);
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, Number.parseInt(req.query.page, 10) || 1), pages);
     const result = await pool.query(
-      `SELECT id, stock_symbol, company_name, exchange, source, created_at, updated_at
-       FROM stocks ${where} ORDER BY ${orderBy}`,
+      `SELECT ${ID} AS id, stock_symbol, company_name, exchange, isdelisted, updated_at
+       FROM ${TABLE} ${where} ORDER BY stock_symbol ASC, ${ID} ASC
+       LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
       params
+    );
+    res.json({ rows: result.rows, total, page, pageSize });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stocks/markets - every distinct exchange value, for the market filter and the
+// add form's market suggestions.
+router.get('/markets', async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT exchange FROM ${TABLE} WHERE exchange IS NOT NULL AND exchange <> '' ORDER BY exchange`
+    );
+    res.json(result.rows.map((r) => r.exchange));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stocks/suggest?q=AA - symbols starting with q, for the symbol inputs' autocomplete.
+router.get('/suggest', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const result = await pool.query(
+      `SELECT DISTINCT ON (stock_symbol) stock_symbol, company_name FROM ${TABLE}
+       WHERE upper(stock_symbol) LIKE upper($1)
+       ORDER BY stock_symbol, ${PREFERRED_ORDER} LIMIT 20`,
+      [`${escapeLike(q)}%`]
     );
     res.json(result.rows);
   } catch (err) {
@@ -274,21 +319,28 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/stocks/by-symbol/AAPL
+// For a stock added in this server's lifetime whose auto-fill left something empty, the
+// detail page explains why (see autoFillNewStock).
+function withAutoFill(stock) {
+  const autofill = autoFillStatus.get(stock.id);
+  return autofill ? { ...stock, autofill } : stock;
+}
+
+// GET /api/stocks/by-symbol/AAPL - case-insensitive. A symbol can have several rows (a
+// recycled ticker keeps its delisted row), so this picks one: an exact-case match first, then
+// the live row, then the newest. The list links to /:id-specific URLs for the others.
 router.get('/by-symbol/:symbol', async (req, res, next) => {
   try {
-    const symbol = req.params.symbol.trim().toUpperCase();
+    const symbol = req.params.symbol.trim();
     const result = await pool.query(
-      `SELECT * FROM stocks WHERE stock_symbol = $1`,
+      `SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE upper(stock_symbol) = upper($1)
+       ORDER BY (stock_symbol = $1) DESC, ${PREFERRED_ORDER} LIMIT 1`,
       [symbol]
     );
     if (!result.rows.length) {
       return res.status(404).json({ errors: ['stock not found'] });
     }
-    // For a stock added in this server's lifetime whose auto-fill left something empty, the
-    // detail page explains why (see autoFillNewStock).
-    const autofill = autoFillStatus.get(result.rows[0].id);
-    res.json(autofill ? { ...result.rows[0], autofill } : result.rows[0]);
+    res.json(withAutoFill(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -343,11 +395,11 @@ router.get('/yahoo-lookup/:symbol', async (req, res, next) => {
 // GET /api/stocks/:id - full company detail record, for the read-only detail view.
 router.get('/:id(\\d+)', async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT * FROM stocks WHERE id = $1', [req.params.id]);
+    const result = await pool.query(`SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE ${ID} = $1`, [req.params.id]);
     if (!result.rows.length) {
       return res.status(404).json({ errors: ['stock not found'] });
     }
-    res.json(result.rows[0]);
+    res.json(withAutoFill(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -371,13 +423,13 @@ router.post('/', async (req, res, next) => {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: existing.stock_symbol });
     }
 
-    const columns = ['stock_symbol', 'company_name', 'exchange', 'source', ...Object.keys(detailFields)];
-    const values = [stock_symbol, company_name, exchange, 'manual', ...Object.values(detailFields)];
+    const columns = ['stock_symbol', 'company_name', 'exchange', ...Object.keys(detailFields)].map(writeColumn);
+    const values = [stock_symbol, company_name, exchange, ...Object.values(detailFields)];
     const placeholders = values.map((_, i) => `$${i + 1}`);
 
     const result = await pool.query(
-      `INSERT INTO stocks (${columns.join(', ')})
-       VALUES (${placeholders.join(', ')}) RETURNING *`,
+      `INSERT INTO ${TABLE} (${columns.join(', ')})
+       VALUES (${placeholders.join(', ')}) RETURNING ${SELECT_COLUMNS}`,
       values
     );
     const inserted = result.rows[0];
@@ -396,7 +448,7 @@ router.post('/', async (req, res, next) => {
       new Promise((resolve) => { timer = setTimeout(() => resolve({ pending: true }), ADD_LOOKUP_TIMEOUT_MS); }),
     ]);
     clearTimeout(timer);
-    const { rows } = await pool.query('SELECT * FROM stocks WHERE id = $1', [inserted.id]);
+    const { rows } = await pool.query(`SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE ${ID} = $1`, [inserted.id]);
     res.status(201).json({ ...(rows[0] || inserted), autofill });
   } catch (err) {
     if (err.code === '23505') {
@@ -406,8 +458,8 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/stocks/:id
-router.put('/:id', async (req, res, next) => {
+// PUT /api/stocks/:id. There is no DELETE: the app may only read, add and update this table.
+router.put('/:id(\\d+)', async (req, res, next) => {
   const { id } = req.params;
   const errors = [...validateStockInput(req.body, { partial: true }), ...validateDetailFields(req.body)];
   if (errors.length) {
@@ -434,59 +486,17 @@ router.put('/:id', async (req, res, next) => {
     }
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    const updated = await applyStockUpdate(client, id, fields);
+    const updated = await applyStockUpdate(pool, id, fields);
     if (!updated) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ errors: ['stock not found'] });
     }
-
-    await client.query('COMMIT');
     res.json(updated);
   } catch (err) {
-    await client.query('ROLLBACK');
     if (err.code === '23505') {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: fields.stock_symbol });
     }
     next(err);
-  } finally {
-    client.release();
-  }
-});
-
-// DELETE /api/stocks/:id
-router.delete('/:id', async (req, res, next) => {
-  const { id } = req.params;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      'DELETE FROM stocks WHERE id = $1 RETURNING stock_symbol, company_name, exchange',
-      [id]
-    );
-    if (!result.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ errors: ['stock not found'] });
-    }
-
-    const deleted = result.rows[0];
-    await client.query(
-      `INSERT INTO stock_deletion_log (stock_symbol, company_name, exchange)
-       VALUES ($1, $2, $3)`,
-      [deleted.stock_symbol, deleted.company_name, deleted.exchange]
-    );
-
-    await client.query('COMMIT');
-    res.status(204).send();
-  } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
   }
 });
 

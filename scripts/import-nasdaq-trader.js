@@ -4,6 +4,7 @@
 // Note: this source does not cover OTC-quoted securities (those aren't "listed" on an exchange).
 require('dotenv').config();
 const pool = require('../db');
+const { TABLE, ID } = require('../lib/stockTable');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
 
 const NASDAQ_LISTED_URL = 'https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt';
@@ -81,11 +82,15 @@ async function main() {
     await client.query('BEGIN');
     for (const stock of stocks) {
       const result = await client.query(
-        `INSERT INTO stocks (stock_symbol, company_name, exchange, source)
-         VALUES ($1, $2, $3, 'nasdaq_trader')
-         ON CONFLICT (stock_symbol) DO NOTHING
-         RETURNING id`,
-        [stock.stock_symbol, stock.company_name, stock.exchange]
+        // Symbols aren't unique in company_profiles, so skip any symbol already present (in
+        // any row) instead of relying on ON CONFLICT.
+        `INSERT INTO ${TABLE} (stock_symbol, company_name, exchange)
+         SELECT $1, $2, $3
+         WHERE NOT EXISTS (SELECT 1 FROM ${TABLE} WHERE stock_symbol = $4)
+         RETURNING ${ID}`,
+        // Symbol passed twice: a reused parameter can't get one inferred type, and casts
+        // need pg_catalog access this role lacks.
+        [stock.stock_symbol, stock.company_name, stock.exchange, stock.stock_symbol]
       );
       if (result.rows.length) inserted++;
       else skippedExisting++;

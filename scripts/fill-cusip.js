@@ -1,16 +1,17 @@
 // Usage: node scripts/fill-cusip.js [SYMBOL ...]
-// Fills in stocks.cusips - not available from Yahoo Finance or NASDAQ Trader's listing
+// Fills in company_profiles.cusips - not available from Yahoo Finance or NASDAQ Trader's listing
 // files at all, so this is the only automated source in this project for that column (see
 // CLAUDE.md). Lookup logic (SEC EDGAR, then quantumonline.com as fallback) lives in
 // lib/cusipLookup.js, shared with the auto-fill triggered on new manual additions
 // (routes/stocks.js).
 //
-// With no symbols given, processes every stock where cusips IS NULL. Requests are spaced
+// With no symbols given, processes every non-delisted stock with no cusips. Requests are spaced
 // QOL_DELAY_MS (default 500ms) apart - quantumonline.com is a small site, not an API.
 require('dotenv').config();
 const pool = require('../db');
 const { lookupCusip, findCusipConflict, hasSecContact } = require('../lib/cusipLookup');
 const { loadNasdaqTraderListing } = require('../lib/nasdaqTrader');
+const { TABLE, ID } = require('../lib/stockTable');
 
 const DELAY_MS = Number(process.env.QOL_DELAY_MS) || 500;
 
@@ -26,12 +27,17 @@ async function main() {
 
   const symbols = process.argv.slice(2).map((s) => s.trim().toUpperCase());
 
+  // Empty strings count as missing too (the table holds both). Delisted rows are skipped
+  // unless named explicitly.
   const { rows: stocks } = symbols.length
-    ? await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE stock_symbol = ANY($1)', [symbols])
-    : await pool.query('SELECT id, stock_symbol, company_name FROM stocks WHERE cusips IS NULL ORDER BY id');
+    ? await pool.query(`SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE} WHERE upper(stock_symbol) = ANY($1)`, [symbols])
+    : await pool.query(
+        `SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE}
+         WHERE NULLIF(cusips, '') IS NULL AND NOT coalesce(isdelisted, false) ORDER BY ${ID}`
+      );
 
   if (symbols.length && stocks.length < symbols.length) {
-    const found = new Set(stocks.map((s) => s.stock_symbol));
+    const found = new Set(stocks.map((s) => s.stock_symbol.toUpperCase()));
     for (const s of symbols) {
       if (!found.has(s)) console.log(`SKIP ${s}: not in database`);
     }
@@ -63,7 +69,7 @@ async function main() {
     } else if (conflict) {
       console.log(`SKIP ${stock.stock_symbol}: ${cusip} (${source}) already belongs to ${conflict.stock_symbol} (${conflict.company_name})`);
     } else {
-      await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusip, stock.id]);
+      await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [cusip, stock.id]);
       console.log(`FILLED ${stock.stock_symbol}: ${cusip} (${source})`);
       filled++;
     }

@@ -15,6 +15,8 @@ const pool = new Pool({
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
+  // Tables are referenced unqualified everywhere, so a non-public schema is selected via search_path.
+  ...(process.env.PGSCHEMA && { options: `-c search_path=${process.env.PGSCHEMA}` }),
 });
 
 module.exports = pool;
