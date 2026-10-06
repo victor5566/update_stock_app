@@ -357,6 +357,68 @@ function describeMonitorValue(field, value, t) {
 
 const MONITOR_BADGE = { listed: 'green', delisted: 'red', unknown: 'gray' };
 
+// The report's notes come from planRow() in lib/stockMonitor.js (English); these patterns
+// translate and categorize them - keep them in sync with the strings there.
+const NOTE_PATTERNS = {
+  recycled: /^symbol is trading under another company \((.*)\) - left delisted$/,
+  duplicate: /^symbol is trading, but another live row already has it$/,
+  nameDiffers: /^name differs: (.*)$/,
+};
+
+function noteKind(note) {
+  for (const [kind, re] of Object.entries(NOTE_PATTERNS)) {
+    const m = note.match(re);
+    if (m) return { kind, arg: m[1] };
+  }
+  return { kind: 'otherNote' };
+}
+
+function describeNote(note, t) {
+  const { kind, arg } = noteKind(note);
+  return kind === 'otherNote' ? note : t('monitorNotes')[kind](arg);
+}
+
+const hasChange = (field, to) => (item) => item.changes.some((c) => c.field === field && (to === undefined || c.to === to));
+const hasNote = (kind) => (item) => item.notes.some((n) => noteKind(n).kind === kind);
+
+// Why a row is in the report - one row can be in several categories. Shown as filter chips,
+// grouped into what was changed, what needs a person, and errors.
+const MONITOR_CATEGORIES = [
+  { key: 'delist', group: 'changes', tone: 'red', test: hasChange('isdelisted', true) },
+  { key: 'revive', group: 'changes', tone: 'green', test: hasChange('isdelisted', false) },
+  { key: 'name', group: 'changes', tone: 'blue', test: hasChange('company_name') },
+  { key: 'exchange', group: 'changes', tone: 'blue', test: hasChange('exchange') },
+  { key: 'category', group: 'changes', tone: 'blue', test: hasChange('category') },
+  { key: 'currency', group: 'changes', tone: 'blue', test: hasChange('currency') },
+  { key: 'recycled', group: 'review', tone: 'amber', test: hasNote('recycled') },
+  { key: 'duplicate', group: 'review', tone: 'amber', test: hasNote('duplicate') },
+  { key: 'nameDiffers', group: 'review', tone: 'amber', test: hasNote('nameDiffers') },
+  { key: 'otherNote', group: 'review', tone: 'gray', test: hasNote('otherNote') },
+  { key: 'error', group: 'errors', tone: 'red', test: (item) => Boolean(item.error) },
+];
+const MONITOR_GROUPS = [
+  { key: 'changes', labelKey: 'monitorGroupChanges' },
+  { key: 'review', labelKey: 'monitorGroupReview' },
+  { key: 'errors', labelKey: 'monitorGroupErrors' },
+];
+
+function MonitorCategoryFilter({ items, category, onPick }) {
+  const t = useT();
+  const counts = {};
+  for (const c of MONITOR_CATEGORIES) counts[c.key] = items.filter(c.test).length;
+  return h('div', { id: 'monitor-categories', className: 'mb-4 space-y-2.5 rounded-xl border border-slate-200 p-3 dark:border-slate-800' },
+    h('div', { className: 'flex flex-wrap items-center gap-2' },
+      h(Chip, { id: 'monitor-cat-all', active: category === 'all', count: items.length, onClick: () => onPick('all') }, t('monitorCatAll'))),
+    ...MONITOR_GROUPS.map((g) => {
+      const cats = MONITOR_CATEGORIES.filter((c) => c.group === g.key && counts[c.key] > 0);
+      if (!cats.length) return null;
+      return h('div', { key: g.key, className: 'flex flex-wrap items-center gap-2' },
+        h('span', { className: 'w-full text-xs font-medium text-slate-500 sm:w-40 dark:text-slate-400' }, t(g.labelKey)),
+        ...cats.map((c) => h(Chip, { key: c.key, id: `monitor-cat-${c.key}`, tone: c.tone, active: category === c.key, count: counts[c.key], onClick: () => onPick(c.key) }, t('monitorCats')[c.key])));
+    }),
+    h('p', { className: 'text-xs text-slate-500 dark:text-slate-400' }, t('monitorCatHint')));
+}
+
 function MonitorPanel({ onApplied }) {
   const t = useT();
   const [state, setState] = useState(null); // GET /api/monitor/status
@@ -365,6 +427,7 @@ function MonitorPanel({ onApplied }) {
   const [stopClicked, setStopClicked] = useState(false);
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
+  const [category, setCategory] = useState('all'); // MONITOR_CATEGORIES key, or 'all'
   const reportShown = useRef(null); // finishedAt of the report whose items are loaded
   const timer = useRef(null);
   const onAppliedRef = useRef(onApplied);
@@ -397,6 +460,7 @@ function MonitorPanel({ onApplied }) {
       list.sort((a, b) => (b.changes.length > 0) - (a.changes.length > 0));
       setItems(list);
       setPage(1);
+      setCategory('all');
       if (report.apply) onAppliedRef.current();
     }
   }, []);
@@ -451,9 +515,15 @@ function MonitorPanel({ onApplied }) {
   }
   const progress = running && state.progress && state.progress.total ? Math.round((state.progress.done / state.progress.total) * 100) : null;
 
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const activeCategory = MONITOR_CATEGORIES.find((c) => c.key === category);
+  const shown = activeCategory ? items.filter(activeCategory.test) : items;
+  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const shownPage = Math.min(Math.max(1, page), totalPages);
   const first = (shownPage - 1) * PAGE_SIZE;
+  const pickCategory = (key) => {
+    setCategory(key);
+    setPage(1);
+  };
 
   return h(Card, {
     title: t('monitorTitle'),
@@ -467,21 +537,23 @@ function MonitorPanel({ onApplied }) {
     statusLines.length > 0 && h(Alert, { id: 'monitor-status', tone: state && state.lastError && !running ? 'error' : 'info', live: 'polite', className: 'mb-4' }, ...withBreaks(statusLines)),
     progress !== null && h('div', { className: 'mb-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800' },
       h('div', { className: 'h-full rounded-full bg-blue-600 transition-all', style: { width: `${progress}%` } })),
+    items.length > 0 && h(MonitorCategoryFilter, { items, category, onPick: pickCategory }),
     h(Table, { id: 'monitor-table', head: [t('labelSymbol'), t('labelCompany'), t('monitorThStatus'), t('monitorThChanges')] },
-      items.slice(first, first + PAGE_SIZE).map((item) => {
+      shown.slice(first, first + PAGE_SIZE).map((item) => {
+        // Changes in the normal colour, notes that need a person in amber, errors in red.
         const lines = [
-          ...item.changes.map((c) => `${t('monitorFields')[c.field] || c.field}: ${describeMonitorValue(c.field, c.from, t)} → ${describeMonitorValue(c.field, c.to, t)}`),
-          ...item.notes,
-          ...(item.error ? [item.error] : []),
+          ...item.changes.map((c) => h('span', null, `${t('monitorFields')[c.field] || c.field}: ${describeMonitorValue(c.field, c.from, t)} → ${describeMonitorValue(c.field, c.to, t)}`)),
+          ...item.notes.map((n) => h('span', { className: noteKind(n).kind === 'otherNote' ? 'text-slate-500 dark:text-slate-400' : 'text-amber-700 dark:text-amber-300' }, describeNote(n, t))),
+          ...(item.error ? [h('span', { className: 'text-red-600 dark:text-red-400' }, item.error)] : []),
         ];
         return h('tr', { key: item.id },
           h('td', { className: TD }, h(StockLink, { symbol: item.stock_symbol, id: item.id })),
           h('td', { className: TD }, item.company_name),
           h('td', { className: TD }, h(Badge, { tone: MONITOR_BADGE[item.status] || 'gray', title: item.reason }, t('monitorStatus')[item.status] || item.status)),
-          h('td', { className: cx(TD, item.changes.length ? '' : 'text-slate-500 dark:text-slate-400') }, ...withBreaks(lines)));
+          h('td', { className: TD }, ...withBreaks(lines)));
       })),
-    items.length === 0 && h('p', { id: 'monitor-empty-state', className: 'py-8 text-center text-sm text-slate-500' }, t('monitorEmpty')),
-    h(Pagination, { page: shownPage, totalPages, total: items.length, onPage: setPage, idPrefix: 'monitor-' }));
+    shown.length === 0 && h('p', { id: 'monitor-empty-state', className: 'py-8 text-center text-sm text-slate-500' }, items.length ? t('monitorCatEmpty') : t('monitorEmpty')),
+    h(Pagination, { page: shownPage, totalPages, total: shown.length, onPage: setPage, idPrefix: 'monitor-' }));
 }
 
 // --- The page ---

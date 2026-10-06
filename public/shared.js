@@ -129,6 +129,30 @@ const TRANSLATIONS = {
     monitorEmpty: '尚無偵測結果',
     monitorStatus: { listed: '上市', delisted: '下市', unknown: '無法判斷' },
     monitorFields: { company_name: '名稱', exchange: '市場', isdelisted: '下市', category: 'Category', currency: '幣別' },
+    monitorGroupChanges: '自動變更',
+    monitorGroupReview: '需要注意（未變更）',
+    monitorGroupErrors: '錯誤',
+    monitorCatAll: '全部',
+    monitorCatHint: '點選分類可篩選下方結果；同一檔股票可能同時屬於多個分類。',
+    monitorCatEmpty: '這個分類沒有資料',
+    monitorCats: {
+      delist: '標為下市',
+      revive: '恢復上市',
+      name: '名稱更正',
+      exchange: '市場變更',
+      category: 'Category 變更',
+      currency: '補上幣別',
+      recycled: '代號已被其他公司使用',
+      duplicate: '代號重複',
+      nameDiffers: '名稱不一致',
+      otherNote: '其他說明',
+      error: '寫入失敗',
+    },
+    monitorNotes: {
+      recycled: (name) => `代號目前由另一家公司交易（${name}），維持下市`,
+      duplicate: () => '代號交易中，但已有另一筆未下市資料使用這個代號，維持下市',
+      nameDiffers: (name) => `資料來源的名稱不同：${name}（未自動更正，請人工確認）`,
+    },
   },
   en: {
     locale: 'en-US',
@@ -250,6 +274,30 @@ const TRANSLATIONS = {
     monitorEmpty: 'No results yet',
     monitorStatus: { listed: 'Listed', delisted: 'Delisted', unknown: 'Unknown' },
     monitorFields: { company_name: 'Name', exchange: 'Market', isdelisted: 'Delisted', category: 'Category', currency: 'Currency' },
+    monitorGroupChanges: 'Changed automatically',
+    monitorGroupReview: 'Needs attention (not changed)',
+    monitorGroupErrors: 'Errors',
+    monitorCatAll: 'All',
+    monitorCatHint: 'Click a category to filter the results below; one stock can be in several categories.',
+    monitorCatEmpty: 'Nothing in this category',
+    monitorCats: {
+      delist: 'Marked delisted',
+      revive: 'Listed again',
+      name: 'Name corrected',
+      exchange: 'Market changed',
+      category: 'Category changed',
+      currency: 'Currency filled',
+      recycled: 'Symbol used by another company',
+      duplicate: 'Duplicate symbol',
+      nameDiffers: 'Name differs',
+      otherNote: 'Other notes',
+      error: 'Write failed',
+    },
+    monitorNotes: {
+      recycled: (name) => `The symbol now trades as another company (${name}) - left delisted`,
+      duplicate: () => 'The symbol is trading, but another non-delisted row already has it - left delisted',
+      nameDiffers: (name) => `The sources give a different name: ${name} (not changed automatically - please check)`,
+    },
   },
 };
 
@@ -386,7 +434,32 @@ const BADGE_TONES = {
   red: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300',
   gray: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300',
   blue: 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-300',
+  amber: 'bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300',
 };
+
+// A toggle chip with a count, e.g. the stock monitor's category filters.
+const CHIP_TONES = {
+  green: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
+  red: 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300',
+  gray: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200',
+  blue: 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
+  amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
+};
+
+function Chip({ tone = 'gray', active, count, onClick, children, id }) {
+  return h('button', {
+    type: 'button',
+    id,
+    'aria-pressed': Boolean(active),
+    onClick,
+    className: cx(
+      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
+      active
+        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+        : cx(CHIP_TONES[tone], 'hover:brightness-95'),
+    ),
+  }, children, count !== undefined && h('span', { className: cx('rounded-full px-1.5 text-[11px] tabular-nums', active ? 'bg-white/20 dark:bg-slate-900/10' : 'bg-white/70 dark:bg-black/20') }, count.toLocaleString()));
+}
 
 function Badge({ tone = 'gray', children, title }) {
   return h('span', { title, className: cx('inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', BADGE_TONES[tone]) }, children);
