@@ -37,7 +37,7 @@ for (const dep of Object.keys(dependencies)) {
   try {
     require.resolve(dep, { paths: [ROOT] });
   } catch {
-    errors.push(`dependency ${dep} is not installed - run npm install / npm ci first`);
+    errors.push(`dependency ${dep} is not installed - run npm install first`);
   }
 }
 

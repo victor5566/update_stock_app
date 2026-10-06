@@ -139,8 +139,8 @@ cmd_activate() {
   node_ok || die "Node on the server is missing or older than 22.8.0 ($(node -v 2>/dev/null || echo none))"
 
   ln -sfn "$SHARED/.env" "$dir/.env"
-  log "npm ci (production dependencies) with Node $(node -v)"
-  (cd "$dir" && npm ci --omit=dev --no-audit --no-fund --update-notifier=false --loglevel=error)
+  log "npm install (production dependencies) with Node $(node -v)"
+  (cd "$dir" && npm install --omit=dev --no-audit --no-fund --update-notifier=false --loglevel=error)
   log "npm run build"
   (cd "$dir" && npm run build --silent --update-notifier=false)
 
