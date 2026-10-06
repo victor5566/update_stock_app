@@ -112,7 +112,7 @@ env_port() {
 restart_and_check() {
   local port url i
   port="$(env_port)"
-  url="http://127.0.0.1:$port/config.js"
+  url="http://127.0.0.1:$port/api/health"
   sudo -n systemctl restart "$SERVICE_NAME"
   for i in $(seq 1 20); do
     sleep 1

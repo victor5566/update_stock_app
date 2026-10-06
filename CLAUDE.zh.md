@@ -4,7 +4,7 @@
 
 ## 專案簡介
 
-一個股票代碼維護系統：後端是純 Node.js/Express，前端是不需建置流程的 React（React 18 UMD，不用打包工具），資料存在 PostgreSQL。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
+一個股票代碼維護系統：後端是純 Node.js/Express（JSON API），資料存在 PostgreSQL。**目前沒有前端**：依使用者要求，舊前端已在 2026-10-06 刪除，連 git 歷史也清除（每個 commit 中的 `public/` 都已移除並強制推送），之後要用 **React + Tailwind CSS** 從頭重建。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
 
 **資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle_test` 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql`）。
 
@@ -27,7 +27,7 @@ npm run build       # 部署前檢查（scripts/build.js）
 
 ### 資料庫
 
-連線設定來自 `.env`（不進 git；參考 `.env.example`），由 `db.js` 讀取：`PGHOST`／`PGPORT`／`PGUSER`／`PGPASSWORD`／`PGDATABASE`，加上 `PGSCHEMA=test`——`db.js` 會把它設成連線的 `search_path`，所有查詢都用不加 schema 的表名。`.env` 裡以註解保留了舊的本機資料庫設定。`HOST`（監聽位址，預設 `0.0.0.0`）和 `PUBLIC_URL`（瀏覽器連到網站的網址，例如 `http://172.18.10.196:3000`）由 `server.js` 讀取；`PUBLIC_URL` 透過 `GET /config.js` 傳給前端（`window.APP_CONFIG.apiBase`，註冊在 `express.static` 和 `/<代號>` 萬用路由之前），`app.js`／`stock.js` 的 API 網址都由 `API_ROOT` 組成。未設定時用相對路徑 `/api`。WSL 的 IP 在 WSL 重啟或電腦重開機後可能改變——那時必須更新 `PUBLIC_URL`，否則網頁的 API 呼叫會連到舊位址。`.env` 也存放 `SEC_EDGAR_CONTACT`，是 SEC EDGAR 請求 `User-Agent` 必填的聯絡資訊（見 `lib/cusipLookup.js`）。
+連線設定來自 `.env`（不進 git；參考 `.env.example`），由 `db.js` 讀取：`PGHOST`／`PGPORT`／`PGUSER`／`PGPASSWORD`／`PGDATABASE`，加上 `PGSCHEMA=test`——`db.js` 會把它設成連線的 `search_path`，所有查詢都用不加 schema 的表名。`.env` 裡以註解保留了舊的本機資料庫設定。`HOST`（監聽位址，預設 `0.0.0.0`）由 `server.js` 讀取，它只提供 API（`/api/stocks`、`/api/monitor`，以及 `GET /api/health`——不連資料庫的存活檢查，給 `deploy/remote.sh` 用）。既有 `.env` 裡殘留的 `PUBLIC_URL` 會被忽略。WSL 的 IP 在 WSL 重啟或電腦重開機後可能改變。`.env` 也存放 `SEC_EDGAR_CONTACT`，是 SEC EDGAR 請求 `User-Agent` 必填的聯絡資訊（見 `lib/cusipLookup.js`）。
 
 這個帳號不能讀大部分的 `pg_catalog`（`pg_namespace`、`pg_tables` → permission denied）；要查結構請用 `information_schema`、`has_*_privilege()` 和 `to_regnamespace()`。這也會讓某些悄悄用到 `pg_catalog` 的 SQL 失敗：**明確型別轉換（`$1::varchar`）和 `substring(x from y)` 會出現「permission denied for schema pg_catalog」**——不要用。另外，同一個參數若同時用在 `INSERT ... SELECT $1` 的值和 `WHERE` 比對裡，會出現「inconsistent types deduced for parameter」——改成把同一個值當兩個參數傳入（匯入腳本都這樣做）。
 
@@ -39,7 +39,7 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 
 ## 架構
 
-**`lib/stockTable.js` 是唯一知道這張表細節的地方。** `TABLE`（`company_profiles`）、`ID`（`company_profile_id`）、`SELECT_COLUMNS`（把 `company_profile_id` 取別名為 `id`、`companysite` 取別名為 `urll`，讓 API／前端維持原本的欄位名稱）、`writeColumn()`（寫入時把 API 欄位名轉成實際欄位）、`isBlank()` 和 `PREFERRED_ORDER`。`routes/`、`lib/`、`scripts/` 的所有查詢都透過它們——不要在別處寫死表名或欄位名稱。
+**`lib/stockTable.js` 是唯一知道這張表細節的地方。** `TABLE`（`company_profiles`）、`ID`（`company_profile_id`）、`SELECT_COLUMNS`（把 `company_profile_id` 取別名為 `id`、`companysite` 取別名為 `urll`，讓 API 維持原本的欄位名稱）、`writeColumn()`（寫入時把 API 欄位名轉成實際欄位）、`isBlank()` 和 `PREFERRED_ORDER`。`routes/`、`lib/`、`scripts/` 的所有查詢都透過它們——不要在別處寫死表名或欄位名稱。
 
 **這張表的資料特性**（影響下面多條規則）：
 - `stock_symbol` **不是唯一的**（約 200 個代號有多筆）：代號被重用時，舊公司那筆會保留（`isdelisted = true`、`display_security = 'false'`），和新公司那筆並存。只知道代號時，用 `PREFERRED_ORDER`（未下市優先，再來 `display_security = 'true'`，再來 id 最新）選一筆。`stock_symbol` 上有某個唯一索引（`idx_unq_company_profiles_stock_symbol`，這個帳號讀不到定義），所以新增仍可能遇到 23505 → 回 409；匯入腳本用 `INSERT ... SELECT ... WHERE NOT EXISTS`，而不是需要相符非部分約束的 `ON CONFLICT (stock_symbol)`。
@@ -50,23 +50,23 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `isdelisted` 可以是 NULL（請用 `coalesce(isdelisted, false)`）。
 
 **路由**：`routes/stocks.js`（掛在 `/api/stocks`）和 `routes/monitor.js`（掛在 `/api/monitor`，見下方股票偵測）。刻意**沒有 DELETE 路由**。
-- `GET /` 在伺服器端分頁（`?page=&pageSize=`，最多 100；回傳 `{ rows, total, page, pageSize }`）——表太大不能整包送出，這也是前端不再持有完整清單的原因。`buildStockFilter()`（`?market=&q=`，`q` 會跳脫 LIKE 字元）與 `GET /export.csv` 共用，所以匯出內容就是篩選後的清單（全部頁）。
-- `GET /markets`（所有不重複的市場值，給市場篩選 `<select>` 和新增表單的 `#exchange-datalist`）和 `GET /suggest?q=`（依前綴列出 20 個代號，給 `#stock-datalist`）。
+- `GET /` 在伺服器端分頁（`?page=&pageSize=`，最多 100；回傳 `{ rows, total, page, pageSize }`）——表太大不能整包送出，用戶端必須分頁讀取。`buildStockFilter()`（`?market=&q=`，`q` 會跳脫 LIKE 字元）與 `GET /export.csv` 共用，所以匯出內容就是篩選後的清單（全部頁）。
+- `GET /markets`（所有不重複的市場值，例如給市場篩選或市場建議）和 `GET /suggest?q=`（依前綴列出 20 個代號，給代號自動完成——表太大不能預先載入）。
 - `GET /by-symbol/:symbol`（不分大小寫；大小寫完全相同者優先，再依 `PREFERRED_ORDER`）和 `GET /:id` 都回傳 `SELECT_COLUMNS`，若有的話再加上程序內的自動補資料報告。
-- `GET /yahoo-lookup/:symbol`——新增表單的預填（見下方）。
+- `GET /yahoo-lookup/:symbol`——新增時的預填：先檢查是否已有未下市的資料（有就回 409 並附 `existing_symbol`），否則回傳公司名稱、市場和 `source`（`nasdaq_trader`／`yahoo`）。雖然路由叫 yahoo，但代號若在 NASDAQ Trader 清單上（`getCachedListing()`，快取 1 小時），以清單的市場為準，Yahoo 的名稱只有和清單一致時才採用——Yahoo 會保留代號前一家公司的名稱（DPU 曾回傳「DB Commodity Long ETN」）。不會寫入任何資料。
 - `POST /`／`PUT /:id`——新增／修改。`PUT` 透過 `lib/applyStockUpdate.js`（一個 `UPDATE ... RETURNING`；已沒有歷史表——由資料表的稽核 trigger 記錄變更）。若新增其他修改股票的方式，請呼叫它，不要重寫欄位對應。
 
-**重複**：`findEquivalentStock`（預填查詢、`POST`、`PUT` 改代號）把 `BRK-B`、`brk.b`、`BRK.B` 視為同一檔（`lib/yahoo.js` 的 `symbolsEquivalent`），而且只考慮**未下市**的資料，所以代號被重用時，新公司可以和舊的下市資料並存。回 409 並附 `existing_symbol`，前端的重複警告會連到它。
+**重複**：`findEquivalentStock`（預填查詢、`POST`、`PUT` 改代號）把 `BRK-B`、`brk.b`、`BRK.B` 視為同一檔（`lib/yahoo.js` 的 `symbolsEquivalent`），而且只考慮**未下市**的資料，所以代號被重用時，新公司可以和舊的下市資料並存。回 409 並附 `existing_symbol`（實際存放的寫法，例如送 `BRK-B` 時回 `BRK.B`）。
 
-**`POST /api/stocks` 會在回應前查詢公司資料，並說明缺了什麼。** 手動新增時若沒有自帶任何延伸欄位（正常情況——網頁表單從來不帶），`routes/stocks.js` 會先新增資料，再執行 `autoFillNewStock()`——同時跑 `lib/fillCompanyDetails.js` 和 `lib/cusipLookup.js`（`Promise.allSettled`，一個失敗不影響另一個）——並**等它完成**（使用者要求：新增後就要帶回所有查得到的資料，而不是之後才補），最多等 `ADD_LOOKUP_TIMEOUT_MS`（20 秒；超過就回 `autofill: { pending: true }`，查詢在背景繼續）。回應是重新讀取的資料加上 `autofill`，報告每部分的結果：`details` 為 `filled | not_found | error`，`cusip` 為 `filled | not_found | conflict | error`，並附 `lookupCusip` 各來源的 `reasons` 代碼（SEC `no_cik`／`no_13g`／`skipped_non_common`／`skipped_multi_class`……，quantumonline `not_found`／`name_mismatch`……）或已持有該 CUSIP 的 `conflict_symbol`，以及 `next_retry_at`／`retries_exhausted`。新增表單（`public/app.js` 的 `StockForm` 的送出處理／`autoFillProblems`）把它轉成易讀的原因清單，詳細頁也顯示同樣內容（`#autofill-notice`）並在下次重試後重新讀取。`not_found`／`error` 會在 **1、5、15、60 分鐘後重試**（`AUTO_FILL_RETRY_MS`；先重新讀取資料，已補齊就停止）；CUSIP 衝突不重試——需要人工判斷。剛上市的股票在新增當下常常還不在資料來源裡（VYLR 新增時 Yahoo 沒有資料，幾小時後才有；新發行人在 SEC 還沒有 13G）。Yahoo 只回傳 `currency` 視為沒找到。報告和重試都在程序內，伺服器重啟就會消失，之後由 `scripts/fill-company-details.js`／`scripts/fill-cusip.js` 補上仍缺的資料。若新增批次匯入路徑也要有這種處理，請逐筆刻意執行——不要同時發出數百個，因為 `lib/cusipLookup.js` 會打兩個有速率限制的外部服務。
+**`POST /api/stocks` 會在回應前查詢公司資料，並說明缺了什麼。** 手動新增時若沒有自帶任何延伸欄位（正常情況——舊網頁表單從來不帶），`routes/stocks.js` 會先新增資料，再執行 `autoFillNewStock()`——同時跑 `lib/fillCompanyDetails.js` 和 `lib/cusipLookup.js`（`Promise.allSettled`，一個失敗不影響另一個）——並**等它完成**（使用者要求：新增後就要帶回所有查得到的資料，而不是之後才補），最多等 `ADD_LOOKUP_TIMEOUT_MS`（20 秒；超過就回 `autofill: { pending: true }`，查詢在背景繼續）。回應是重新讀取的資料加上 `autofill`，報告每部分的結果：`details` 為 `filled | not_found | error`，`cusip` 為 `filled | not_found | conflict | error`，並附 `lookupCusip` 各來源的 `reasons` 代碼（SEC `no_cik`／`no_13g`／`skipped_non_common`／`skipped_multi_class`……，quantumonline `not_found`／`name_mismatch`……）或已持有該 CUSIP 的 `conflict_symbol`，以及 `next_retry_at`／`retries_exhausted`。報告還在記憶體中時，`GET /:id` 和 `GET /by-symbol/:symbol` 也會回傳它，用戶端可以據此顯示缺資料的原因，並在 `next_retry_at` 之後重新讀取。`not_found`／`error` 會在 **1、5、15、60 分鐘後重試**（`AUTO_FILL_RETRY_MS`；先重新讀取資料，已補齊就停止）；CUSIP 衝突不重試——需要人工判斷。剛上市的股票在新增當下常常還不在資料來源裡（VYLR 新增時 Yahoo 沒有資料，幾小時後才有；新發行人在 SEC 還沒有 13G）。Yahoo 只回傳 `currency` 視為沒找到。報告和重試都在程序內，伺服器重啟就會消失，之後由 `scripts/fill-company-details.js`／`scripts/fill-cusip.js` 補上仍缺的資料。若新增批次匯入路徑也要有這種處理，請逐筆刻意執行——不要同時發出數百個，因為 `lib/cusipLookup.js` 會打兩個有速率限制的外部服務。
 
-**股票偵測（`lib/stockMonitor.js`）**——使用者要求的自動「偵測並更新」程式：把每一筆資料（依使用者要求涵蓋所有市場）拿去比對 NASDAQ Trader 官方清單和 Yahoo 報價（每批 200 個，7.9 萬筆約 5 分鐘），**絕不刪除**。執行方式：網頁的「股票偵測與自動更新」區塊（`POST /api/monitor/run { apply }`，輪詢 `GET /api/monitor/status`，明細由 `GET /api/monitor/report` 取得；狀態存在 `routes/monitor.js` 的程序內）、`scripts/monitor-stocks.js [--apply] [--list] [代號...]`（不加 `--apply` 只預覽），以及在 `.env` 設定 `MONITOR_DAILY_AT=HH:MM` 每日執行（目前設定 03:00 台北時間；`routes/monitor.js` 的 `scheduleDaily()`，那個時間伺服器必須在跑）。規則集中在純函式 `planRow(row, ctx)`（曾以 20 個假資料案例臨時驗證——修改規則時請重建一套）：
+**股票偵測（`lib/stockMonitor.js`）**——使用者要求的自動「偵測並更新」程式：把每一筆資料（依使用者要求涵蓋所有市場）拿去比對 NASDAQ Trader 官方清單和 Yahoo 報價（每批 200 個，7.9 萬筆約 5 分鐘），**絕不刪除**。執行方式：透過 API（`POST /api/monitor/run { apply }`，輪詢 `GET /api/monitor/status`，明細由 `GET /api/monitor/report` 取得；狀態存在 `routes/monitor.js` 的程序內）、`scripts/monitor-stocks.js [--apply] [--list] [代號...]`（不加 `--apply` 只預覽），以及在 `.env` 設定 `MONITOR_DAILY_AT=HH:MM` 每日執行（目前設定 03:00 台北時間；`routes/monitor.js` 的 `scheduleDaily()`，那個時間伺服器必須在跑）。規則集中在純函式 `planRow(row, ctx)`（曾以 20 個假資料案例臨時驗證——修改規則時請重建一套）：
 - 狀態：在官方清單上，或 Yahoo 最後成交 ≤ 30 天 → 上市；Yahoo 最後成交 ≥ 120 天 → 下市；NASDAQ/NYSE/AMEX 的一般代號，官方清單和 Yahoo 都沒有 → 下市；其他（交易稀少的 OTC、Yahoo 批次失敗、不在清單上的特別股）→ 無法判斷，不動。已下市的資料只有在目前名稱是同一家公司、且沒有其他未下市資料使用這個代號時才會改回上市（代號重用）。第一次預覽顯示約 2.6 萬筆要改回上市，其中約 2.3 萬筆是表中標為下市的非美股（可能是另一個系統的「不追蹤」）；使用者仍選擇涵蓋全部市場。
 - 名稱：美國上市股需要官方清單與 Yahoo 一致（同以往）；其他用 Yahoo 的 `longName`，但 30／31 個字元且以字母結尾的名稱視為被截斷，只記錄不套用。佔位名稱（`324823`、`...missing co name`、`eo_company`、空白）一律替換。
 - 市場：官方清單的 NASDAQ/NYSE/AMEX 為準；Yahoo 顯示已改在 OTC 交易的美股 → `OTC`；非美股只補空白。`marketOf()` 會把 PNK/OEM/NYQ 等寫法歸一。
 - Category（只處理 OTC）：Yahoo 的 `fullExchangeName - quoteSourceName - exchange`，例如 `OTC Markets OTCPK - PNK`／`OTC Markets OTCQX - Delayed Quote - OQX`；空白時填入，或既有的 `OTC Markets ...` 值層級／代碼不同時更新（quoteSourceName 時有時無，比對時忽略）。其他類型的 Category（`Domestic Common Stock`、`ETF`）不動。
 - 幣別只補空白。之後在寫入模式下才做：補公司資料（`fillCompanyDetails`），每次最多 `MONITOR_DETAIL_LIMIT`（300）筆缺資料的交易中股票；補 CUSIP，每次最多 `MONITOR_CUSIP_LIMIT`（50）筆交易中的美股——美股優先、最新的優先，所以每次執行會逐步補齊；CUSIP 查詢之間間隔 `QOL_DELAY_MS`（照顧 quantumonline）。`stock_symbol` 永遠不會被自動修改。
-- **中止**：`POST /api/monitor/stop`（網頁上的紅色「中止」按鈕，只在執行中顯示）會設定 `stopRequested`；`runStockMonitor` 的 `shouldStop()` 會在報價批次、每筆資料、補公司資料、補 CUSIP 之間檢查。在取得報價階段中止時**完全不寫入**（`stoppedDuringQuotes`）——用不完整的報價判斷，會把所有缺報價的股票誤判為下市。之後的階段中止時，已寫入的變更會保留；報告帶有 `stopped`，`counts.checked` 是實際處理的筆數。重啟伺服器也會結束執行（使用者第一次從網頁跑全表時，就是在 79,381 筆中約 2,500 筆時以重啟結束的）；命令列用 Ctrl+C 停止。
+- **中止**：`POST /api/monitor/stop`會設定 `stopRequested`；`runStockMonitor` 的 `shouldStop()` 會在報價批次、每筆資料、補公司資料、補 CUSIP 之間檢查。在取得報價階段中止時**完全不寫入**（`stoppedDuringQuotes`）——用不完整的報價判斷，會把所有缺報價的股票誤判為下市。之後的階段中止時，已寫入的變更會保留；報告帶有 `stopped`，`counts.checked` 是實際處理的筆數。重啟伺服器也會結束執行（使用者第一次從舊網頁跑全表時，就是在 79,381 筆中約 2,500 筆時以重啟結束的）；命令列用 Ctrl+C 停止。
 - 2026-10-06 第一次正式套用在使用者的 `Missing tickers.xlsx` 代號上（之前先用一次性腳本新增其中 308 檔資料庫沒有、且仍在交易的股票，名稱／市場規則與新增預填相同）。
 
 **`lib/yahoo.js`** 集中管理 `yahoo-finance2` 用戶端。`lookupStock(symbol)` 回傳 `stock_symbol`／`company_name`／`exchange`（透過 `marketLabelForQuote(quote)`，把 Yahoo 較細的名稱如 `NasdaqGS`／`NYSE American`／`OTC Markets OTCPK` 收斂成 `NASDAQ`／`NYSE`／`AMEX`／`OTC`——先查 `EXCHANGE_TO_MARKET` 代碼，再用名稱比對，無法辨識的就直接用 Yahoo 的 `fullExchangeName`），以及 `fetchCompanyDetails()` 盡力取得的延伸欄位（`sector`、`industry`、`currency`、`company_location`、`urll`、`description`、`ceo`——來自 `quoteSummary` 的 `assetProfile`／`price` 模組；`ceo` 從 `companyOfficers` 中找職稱含 "CEO"／"Chief Executive" 的人；`company_location` 是 `composeAddress()` 組成的完整地址，缺的部分會略過）。`fetchCompanyDetails` 不會丟出錯誤——`quoteSummary` 失敗時欄位只會是 `null`。Yahoo 完全不提供 CUSIP（那是 CUSIP Global Services 的授權資料）。
@@ -99,16 +99,6 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `fill-company-details.js [代號...]`／`fill-cusip.js [代號...]`——用上述函式庫補資料。不指定代號時，會處理所有**未下市**且有空白欄位的資料——在這張表裡有數萬筆，很多是非美股（SEC/quantumonline 查不到），所以建議指定代號。
 - `monitor-stocks.js [--apply] [--list] [代號...]`——在命令列執行股票偵測（見上方）。
 - `audit-stocks.js [--out 路徑.csv]`——**唯讀**交叉比對未下市的 NASDAQ/NYSE/AMEX/OTC 資料（其他市場略過——來源不認得它們）與 NASDAQ Trader 清單、SEC 的 `company_tickers.json`、Yahoo，輸出 `exports/audit-report.csv`（不進 git）供人工檢查：代號變更、下市、名稱被截斷、名稱不符（只有兩個來源一致反對我們時才報）。依結果用 `applyStockUpdate` 修改；下市請設 `isdelisted = true`，絕不刪除。
-- `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與清單的 **匯出 CSV** 按鈕共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
+- `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與 `GET /api/stocks/export.csv` 共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
 
-**前端**（`public/`）是不打包、不需建置的 React——依使用者要求只用 React（不用 Vite、router、JSX）。多頁面架構：`index.html` + `app.js` 是主介面，`stock.html` + `stock.js` 是個股詳細頁；每個 HTML 只有 `<div id="root">` 和 script。React 18 的 UMD 檔案來自 `node_modules`，由 `server.js` 在 `/vendor/react/`、`/vendor/react-dom/` 提供（不用 CDN）；React 19 已不提供 UMD，請維持 18 版——缺少 UMD 檔案時 `npm run build` 會失敗。元件用 `const h = React.createElement` 撰寫，不用 JSX。元素 id 與 class 和舊版原生頁面相同，所以 `styles.css`（包括 `#submit-btn`、`#market-form` 等規則）不需修改。延伸時請遵循：
-- 表單樣式是通用的（`.form-section form`，3 欄格線；`#market-form` 用 4 欄；寬度小於 720px 時變 1 欄）——新表單會自動套用。以前是逐一用表單 id 寫樣式，新表單就沒有樣式。
-- 多語系是 `TRANSLATIONS` 物件（zh/en）加上 `t()` 查詢（`app.js` 透過 `LangContext` 的 `useT()`），語言選擇存在 `localStorage`（以 try/catch 包住）——不是函式庫。`stock.js` 有自己的一份，不與 `app.js` 共用，符合本專案偏好各頁重複而非共用抽象的風格。
-- 股票清單**在伺服器端分頁**（`fetchStocks({ keepPage })`，`PAGE_SIZE = 15`，頁碼旁顯示總筆數）。修改後重新整理目前這頁；新的搜尋／市場篩選回到第 1 頁。
-- 三個「先查詢再修改」表單（改名稱、改代號、改市場——改市場的新值建議來自 `#exchange-datalist`）形式相同：代號輸入框搭配 `#stock-datalist` 自動完成（`suggestSymbols()` 每次輸入時從 `GET /suggest` 取得——表太大不能預先載入）、「查詢/Lookup」按鈕 `GET` `by-symbol` 後啟用表單其餘部分、「清空/Clear」按鈕重設表單、送出時 `PUT`。在 `app.js` 裡它們是同一個 `LookupEditForm` 元件，由 `LOOKUP_FORMS` 設定驅動（輸入框 id、資訊欄位、新值欄位、相同值檢查、PUT 內容）——新增表單時在那裡加一筆設定。datalist 是文字輸入框，依先前回饋刻意不用 `<select>`。
-- 股票代碼輸入框用 `class="uppercase"`（CSS `text-transform`，只影響顯示），不在每次按鍵時改值。
-- 新增／編輯表單（`#stock-form`）只有 `stock_symbol`／`company_name`／`exchange`；延伸欄位由伺服器在新增時查詢，從不手動輸入。市場篩選（`#market-filter`）是 `<select>`，第一個固定選項是「全部市場/All Markets」，其餘來自 `GET /markets`——它曾是 datalist 輸入框，但一旦填了 "OTC"，瀏覽器就只建議符合 "OTC" 的值；不要改回去。
-- **個股詳細頁**：清單連結是 `/<小寫代號>?id=<company_profile_id>`（`stockHref()`）；`server.js` 對任何單層路徑（`/^\/[^/]{1,150}$/`，在 `express.static` 和 `/api/*` 之後）回傳 `public/stock.html`。`stock.js` 有 `?id=` 時取 `GET /api/stocks/:id`，否則從路徑取 `by-symbol`——因為代號不唯一，id 很重要。回應帶有缺漏的 `autofill` 報告時，`#autofill-notice` 列出原因，並在 `next_retry_at` 後重新讀取；否則若是 2 分鐘內新增、`sector`／`cusips` 仍空白，每 3 秒重新讀取（最多 10 次）。
-- **新增表單預填**：代號輸入確定（`change` 事件）時呼叫 `GET /api/stocks/yahoo-lookup/:symbol`，先回報已存在的未下市資料（409 → 附連結的重複警告），否則填入公司名稱／市場。雖然路由叫 yahoo-lookup，對 NASDAQ Trader 清單上的代號（`getCachedListing()`，快取 1 小時），以清單的市場為準，Yahoo 的名稱只在與清單相符時才用——Yahoo 會保留代號前一個主人的名稱（DPU 曾被預填成 "DB Commodity Long ETN"）。只覆寫空白或仍是它自己上次填入的欄位。回應的 `source`（`nasdaq_trader`／`yahoo`）會顯示在提示中。按下新增之前不會寫入任何資料。
-- **新增表單訊息**：`#form-error` 顯示重複警告（用 DOM 節點組成，因為內含連結）；`#form-hint` 顯示查詢進度、新增查詢期間的「正在新增 X…」（送出按鈕停用），新增成功後顯示「已新增 X … 查看：X」並連到新資料，接著（`.form-hint-warn`）每個補不到的部分一行原因，以及何時會重試。
-- **股票偵測區塊**：「預覽（不寫入）」和「偵測並更新」（會先確認）兩個按鈕，執行中另有「中止」按鈕；執行期間每 3 秒輪詢 `GET /api/monitor/status` 顯示進度，結束後由 `GET /api/monitor/report` 載入每筆變更／說明，分頁 15 筆；寫入模式結束後會重新整理股票清單和市場選單。
+**前端**：目前沒有。舊前端（先是原生 JS，後來是用 UMD 載入的 React）已依使用者要求在 2026-10-06 刪除，並從 git 歷史清除；下一版要用 **React + Tailwind CSS** 從頭建立。清除前的完整歷史已另外備份成 repo 外的 git bundle（要使用前先問使用者）。建立新前端時，以上方的 API 為準——`routes/` 不依賴任何特定介面。
