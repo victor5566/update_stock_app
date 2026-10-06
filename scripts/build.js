@@ -1,5 +1,5 @@
 // Usage: npm run build
-// There is nothing to compile (plain Node backend, no-bundler frontend), so "build" is the pre-deploy
+// There is nothing to compile (the app is an API only for now), so "build" is the pre-deploy
 // check every deploy runs (deploy/remote.sh and the company_profiles repo's GitHub Actions workflow):
 // it fails - and so stops the deploy - when the app would not start or would run broken.
 // It doesn't connect to the database.
@@ -18,7 +18,7 @@ if (process.version === 'v22.7.0' || major < 22 || (major === 22 && minor < 8)) 
 
 // 2. Every JS file parses.
 const jsFiles = ['server.js', 'db.js'];
-for (const dir of ['lib', 'routes', 'scripts', 'public']) {
+for (const dir of ['lib', 'routes', 'scripts']) {
   for (const name of fs.readdirSync(path.join(ROOT, dir))) {
     if (name.endsWith('.js')) jsFiles.push(path.join(dir, name));
   }
@@ -39,19 +39,6 @@ for (const dep of Object.keys(dependencies)) {
   } catch {
     errors.push(`dependency ${dep} is not installed - run npm install first`);
   }
-}
-
-// The frontend loads React's UMD builds (served by server.js under /vendor/); React 19 dropped
-// them, so an upgrade past 18 would leave the pages blank.
-// (Checked by path: the packages' "exports" don't expose umd/ to require.resolve.)
-for (const [pkg, file] of [['react', 'umd/react.production.min.js'], ['react-dom', 'umd/react-dom.production.min.js']]) {
-  let found = false;
-  try {
-    found = fs.existsSync(path.join(path.dirname(require.resolve(`${pkg}/package.json`, { paths: [ROOT] })), file));
-  } catch {
-    // package missing - reported with the dependencies above
-  }
-  if (!found) errors.push(`${pkg}/${file} not found - the frontend needs React 18's UMD build (npm install react@18 react-dom@18)`);
 }
 
 // 4. .env must be UTF-8: dotenv reads a UTF-16 file (what Windows PowerShell 5.1's `>` writes) as

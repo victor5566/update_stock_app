@@ -4,8 +4,7 @@
 #
 #   deploy/setup-server.sh [--env-file path/to/server.env]
 #
-# --env-file uploads that file as the server's .env ($APP_DIR/shared/.env). Don't pass your local
-# .env unchanged: PUBLIC_URL there is the WSL address - set it to the server's address, or remove it.
+# --env-file uploads that file as the server's .env ($APP_DIR/shared/.env).
 # DEPLOY_USER needs sudo on the server for this script (you'll be asked for the sudo password).
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 

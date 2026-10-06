@@ -10,7 +10,7 @@ The data lives in an existing shared table, **`test.company_profiles`**, in the 
 Stack:
 
 - **Backend:** Node.js + Express
-- **Frontend:** React 18 (loaded from node_modules, no bundler), with no build step
+- **Frontend:** none at the moment. The old frontend was removed on 2026-10-06; a new one will be built with React + Tailwind CSS.
 - **External data sources:** Yahoo Finance (`yahoo-finance2`), NASDAQ Trader symbol directory, SEC EDGAR, quantumonline.com
 
 ---
@@ -49,7 +49,6 @@ PGSCHEMA=test          # schema that holds company_profiles
 
 PORT=3000
 HOST=0.0.0.0                              # address to listen on (0.0.0.0 = all interfaces)
-PUBLIC_URL=http://<host-or-ip>:3000      # site address; the frontend JavaScript calls the API here
 
 # Required by SEC EDGAR (CUSIP lookup): a real contact email for the User-Agent header
 SEC_EDGAR_CONTACT=your-email@example.com
@@ -68,7 +67,7 @@ npm start        # production: node server.js
 npm run dev      # development: restarts automatically on file changes
 ```
 
-Open <http://localhost:3000>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
+The server provides the API only, for example <http://localhost:3000/api/health> or <http://localhost:3000/api/stocks>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
 
 ### 1.6 Deploy to a remote Linux server
 
@@ -78,34 +77,26 @@ See [docs/Deployment_Guide_en.docx](docs/Deployment_Guide_en.docx) (中文：[do
 
 ## 2. System features
 
-### 2.1 Web UI (`public/index.html`)
+### 2.1 Features
 
-The UI is available in Traditional Chinese and English (toggle on the page).
-
-| Section | What it does |
+| Feature | What it does |
 |---------|--------------|
-| **Stock list** | Shows every row of `company_profiles`, 15 per page, with paging done on the server: about 79,000 rows, including delisted and non-US stocks. You can search by symbol or name, filter by market, and export the current view as CSV with **Export CSV**. The file is UTF-8 with a BOM, so Excel shows accented names correctly. |
-| **Add / edit stock** | Enter a symbol, company name and market. When you leave the symbol field, the form pre-fills the name and market from NASDAQ Trader and Yahoo. It warns you if a non-delisted row already has the symbol, including equivalent spellings such as `BRK-B` and `BRK.B`. |
-| **Automatic detail lookup on add** | After you add a stock, the server looks up sector, industry, CEO, address, website, description and CUSIP before it answers, waiting up to 20 seconds. If something can't be found, the result explains why. Missing parts are retried automatically after 1, 5, 15 and 60 minutes. |
-| **Update company name / update symbol** | Type a symbol (with autocomplete), click **Lookup**, then enter the new value. |
-
-| **Stock Monitor & Auto Update** | Checks every stock against the NASDAQ Trader listing and Yahoo. It marks each stock listed or delisted, and updates the name, market, OTC Category and Currency. It also fills in missing company details and CUSIPs, a few hundred rows per run. It never deletes a stock. **Preview (no writes)** shows what would change; **Check & Update** writes the changes. With `MONITOR_DAILY_AT=03:00` in `.env`, it runs automatically every day at that time. |
+| **Stock list** | Every row of `company_profiles` (about 79,000, including delisted and non-US stocks), paged on the server. Search by symbol or name, filter by market, and export the filtered list as CSV (UTF-8 with a BOM, so Excel shows accented names correctly). |
+| **Add / update** | Add a stock with symbol, company name and market, or update one. A pre-fill lookup gives the name and market from NASDAQ Trader and Yahoo, and a duplicate check rejects a symbol a non-delisted row already has, including equivalent spellings such as `BRK-B` and `BRK.B`. |
+| **Automatic detail lookup on add** | After an add, the server looks up sector, industry, CEO, address, website, description and CUSIP before it answers, waiting up to 20 seconds. The response explains anything that couldn't be found. Missing parts are retried automatically after 1, 5, 15 and 60 minutes. |
+| **Stock Monitor & Auto Update** | Checks every stock against the NASDAQ Trader listing and Yahoo. It marks each stock listed or delisted, and updates the name, market, OTC Category and Currency. It also fills in missing company details and CUSIPs, a few hundred rows per run. It never deletes a stock. A preview shows what would change without writing. With `MONITOR_DAILY_AT=03:00` in `.env`, it runs automatically every day at that time. |
 
 **Removed features.** Delete, the deletion log, the change-history pages, the manual-add log, and Re-check / removal candidates have all been removed. The app's account can't create the extra tables these features need, and it isn't allowed to delete rows. `company_profiles` records its own changes with a database audit trigger.
 
-### 2.2 Per-stock detail page (`public/stock.html`)
+**One symbol, several rows.** This happens when a ticker is reused by a new company: the old company's row stays in the table, marked as delisted. When only a symbol is given (`GET /api/stocks/by-symbol/:symbol`, case-insensitive), the API picks one row in this order:
 
-Go to `http://localhost:3000/<symbol>`, for example `/aapl` or `/000001.sz`, to see a stock's full record. The symbol lookup ignores case.
-
-One symbol can have several rows. This happens when a ticker is reused by a new company: the old company's row stays in the table, marked as delisted. For a bare `/<symbol>` URL, the page picks one row in this order:
-
-1. a row whose symbol matches the URL's case exactly;
+1. a row whose symbol matches the given case exactly;
 2. a row that isn't delisted;
 3. the newest row.
 
-Links from the stock list add `?id=<company_profile_id>`, so they always open the exact row you clicked.
+To get an exact row, use `GET /api/stocks/:id`.
 
-### 2.3 REST API
+### 2.2 REST API
 
 | Method & path | Purpose |
 |---------------|---------|
@@ -115,13 +106,18 @@ Links from the stock list add `?id=<company_profile_id>`, so they always open th
 | `GET /api/stocks/export.csv?market=&q=` | Export the filtered list as CSV |
 | `GET /api/stocks/:id` | One row by `company_profile_id` |
 | `GET /api/stocks/by-symbol/:symbol` | The preferred row for a symbol, plus its latest auto-fill report |
-| `GET /api/stocks/yahoo-lookup/:symbol` | Pre-fill data for the add form (read-only) |
+| `GET /api/stocks/yahoo-lookup/:symbol` | Pre-fill data for an add (read-only). `409` if the stock already exists. |
 | `POST /api/stocks` | Add a stock. Returns `409` for a duplicate. The response includes an `autofill` report. |
 | `PUT /api/stocks/:id` | Update a stock |
+| `POST /api/monitor/run` | Start the stock monitor. Body `{ "apply": true }` writes changes; `false` only previews. |
+| `GET /api/monitor/status` | Progress of the running check, the last report and the next scheduled run |
+| `GET /api/monitor/report` | The last report's per-row changes and notes |
+| `POST /api/monitor/stop` | Stop the running check |
+| `GET /api/health` | Liveness check (doesn't touch the database) |
 
 There is no `DELETE` endpoint.
 
-### 2.4 Command-line scripts (`scripts/`)
+### 2.3 Command-line scripts (`scripts/`)
 
 These scripts connect to the database directly. The server doesn't need to be running.
 
@@ -142,7 +138,7 @@ Run without symbols, the `fill-*` scripts process every non-delisted row with a 
 
 ## 3. Database: `test.company_profiles`
 
-The app uses this one table. It reads 16 of its 35 columns, plus `display_security` (used only to choose between rows that share a symbol). Some column names are different in the API and frontend; `lib/stockTable.js` maps them:
+The app uses this one table. It reads 16 of its 35 columns, plus `display_security` (used only to choose between rows that share a symbol). Some column names are different in the API; `lib/stockTable.js` maps them:
 
 | Column | API field | Notes |
 |--------|-----------|-------|
@@ -163,11 +159,10 @@ The app doesn't touch the table's other columns (`permaticker`, `siccode`, `fama
 ## 4. Project layout
 
 ```
-server.js            Express app: mounts /api/stocks, serves public/, handles /<symbol> detail pages
+server.js            Express app: mounts /api/stocks and /api/monitor (API only, no frontend yet)
 db.js                PostgreSQL pool (reads .env; PGSCHEMA sets search_path)
 lib/stockTable.js    Table name, column mapping, row-preference order for company_profiles
 routes/stocks.js     The API
 lib/                 Shared logic: Yahoo client, CUSIP lookup, update, detail fill, CSV
 scripts/             Command-line tools
-public/              Frontend, React without a bundler (index.html + app.js, stock.html + stock.js, styles.css)
 ```
