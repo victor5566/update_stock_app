@@ -24,7 +24,7 @@ npm run dev         # node --watch server.js
 
 ### 資料庫
 
-連線設定來自 `.env`（不進 git；參考 `.env.example`），由 `db.js` 讀取：`PGHOST`／`PGPORT`／`PGUSER`／`PGPASSWORD`／`PGDATABASE`，加上 `PGSCHEMA=test`——`db.js` 會把它設成連線的 `search_path`，所有查詢都用不加 schema 的表名。`.env` 裡以註解保留了舊的本機資料庫設定。`.env` 也存放 `SEC_EDGAR_CONTACT`，是 SEC EDGAR 請求 `User-Agent` 必填的聯絡資訊（見 `lib/cusipLookup.js`）。
+連線設定來自 `.env`（不進 git；參考 `.env.example`），由 `db.js` 讀取：`PGHOST`／`PGPORT`／`PGUSER`／`PGPASSWORD`／`PGDATABASE`，加上 `PGSCHEMA=test`——`db.js` 會把它設成連線的 `search_path`，所有查詢都用不加 schema 的表名。`.env` 裡以註解保留了舊的本機資料庫設定。`HOST`（監聽位址，預設 `0.0.0.0`）和 `PUBLIC_URL`（瀏覽器連到網站的網址，例如 `http://172.18.10.196:3000`）由 `server.js` 讀取；`PUBLIC_URL` 透過 `GET /config.js` 傳給前端（`window.APP_CONFIG.apiBase`，註冊在 `express.static` 和 `/<代號>` 萬用路由之前），`app.js`／`stock.js` 的 API 網址都由 `API_ROOT` 組成。未設定時用相對路徑 `/api`。WSL 的 IP 在 WSL 重啟或電腦重開機後可能改變——那時必須更新 `PUBLIC_URL`，否則網頁的 API 呼叫會連到舊位址。`.env` 也存放 `SEC_EDGAR_CONTACT`，是 SEC EDGAR 請求 `User-Agent` 必填的聯絡資訊（見 `lib/cusipLookup.js`）。
 
 這個帳號不能讀大部分的 `pg_catalog`（`pg_namespace`、`pg_tables` → permission denied）；要查結構請用 `information_schema`、`has_*_privilege()` 和 `to_regnamespace()`。這也會讓某些悄悄用到 `pg_catalog` 的 SQL 失敗：**明確型別轉換（`$1::varchar`）和 `substring(x from y)` 會出現「permission denied for schema pg_catalog」**——不要用。另外，同一個參數若同時用在 `INSERT ... SELECT $1` 的值和 `WHERE` 比對裡，會出現「inconsistent types deduced for parameter」——改成把同一個值當兩個參數傳入（匯入腳本都這樣做）。
 
