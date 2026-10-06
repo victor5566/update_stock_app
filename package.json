@@ -2,22 +2,27 @@
   "name": "stock-symbol-manager",
   "version": "1.0.0",
   "private": true,
-  "description": "US stock symbol maintenance app (NASDAQ/NYSE/AMEX/OTC) with PostgreSQL",
+  "description": "Stock symbol maintenance for the shared company_profiles table (all markets): Express API, React + Tailwind CSS web UI, PostgreSQL",
   "main": "server.js",
   "engines": {
     "node": ">=22.8.0"
   },
   "scripts": {
-    "build": "node scripts/build.js",
+    "build": "tailwindcss -i styles/tailwind.css -o public/build/app.css --minify",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "dev:css": "tailwindcss -i styles/tailwind.css -o public/build/app.css --watch"
   },
   "dependencies": {
+    "@tailwindcss/cli": "^4.3.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.3.3",
     "yahoo-finance2": "^4.0.2"
   }
 }

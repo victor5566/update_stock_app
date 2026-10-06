@@ -10,7 +10,7 @@ The data lives in an existing shared table, **`test.company_profiles`**, in the 
 Stack:
 
 - **Backend:** Node.js + Express
-- **Frontend:** none at the moment. The old frontend was removed on 2026-10-06; a new one will be built with React + Tailwind CSS.
+- **Frontend:** React 18 + Tailwind CSS v4. No bundler and no JSX: React is served from `node_modules`, and `npm run build` compiles the Tailwind CSS.
 - **External data sources:** Yahoo Finance (`yahoo-finance2`), NASDAQ Trader symbol directory, SEC EDGAR, quantumonline.com
 
 ---
@@ -63,11 +63,15 @@ There is nothing to create: the app only uses `company_profiles`. The login role
 ### 1.5 Run
 
 ```bash
+npm run build    # compile the Tailwind CSS (public/build/app.css)
 npm start        # production: node server.js
 npm run dev      # development: restarts automatically on file changes
+npm run dev:css  # development: recompiles the CSS on every change (run next to npm run dev)
 ```
 
-The server provides the API only, for example <http://localhost:3000/api/health> or <http://localhost:3000/api/stocks>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
+Run `npm run build` at least once before `npm start`: the pages need the compiled CSS. Run npm in WSL, not PowerShell (Tailwind's CLI uses platform-specific binaries, and `node_modules` is shared).
+
+Open <http://localhost:3000>. The API is under `/api`, for example <http://localhost:3000/api/health>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
 
 ### 1.6 Deploy to a remote Linux server
 
@@ -77,7 +81,20 @@ See [docs/Deployment_Guide_en.docx](docs/Deployment_Guide_en.docx) (中文：[do
 
 ## 2. System features
 
-### 2.1 Features
+### 2.1 Web UI
+
+The UI is available in Traditional Chinese and English (switch at the top right) and follows the system's light or dark mode.
+
+| Tab | What it does |
+|-----|--------------|
+| **Stock list** | Search, filter by market, export CSV, page through the list. **Edit** opens the row in the Add / Edit tab. |
+| **Add / Edit** | Add a stock (with the pre-fill and duplicate warning below) or edit the row chosen in the list. |
+| **Update data** | Update a company name, a stock symbol or a market: type a symbol (with autocomplete), click **Lookup**, enter the new value. |
+| **Stock monitor** | Preview or run the stock monitor (below), with progress and a per-row report. |
+
+Each stock has a detail page at `/<symbol>`, for example `/aapl` (links from the list add `?id=` to open the exact row). It shows every stored field, and after an add it explains anything that couldn't be found yet.
+
+### 2.2 Features
 
 | Feature | What it does |
 |---------|--------------|
@@ -96,7 +113,7 @@ See [docs/Deployment_Guide_en.docx](docs/Deployment_Guide_en.docx) (中文：[do
 
 To get an exact row, use `GET /api/stocks/:id`.
 
-### 2.2 REST API
+### 2.3 REST API
 
 | Method & path | Purpose |
 |---------------|---------|
@@ -117,7 +134,7 @@ To get an exact row, use `GET /api/stocks/:id`.
 
 There is no `DELETE` endpoint.
 
-### 2.3 Command-line scripts (`scripts/`)
+### 2.4 Command-line scripts (`scripts/`)
 
 These scripts connect to the database directly. The server doesn't need to be running.
 
@@ -159,10 +176,12 @@ The app doesn't touch the table's other columns (`permaticker`, `siccode`, `fama
 ## 4. Project layout
 
 ```
-server.js            Express app: mounts /api/stocks and /api/monitor (API only, no frontend yet)
+server.js            Express app: /api/stocks, /api/monitor, /api/health, the frontend and /<symbol> detail pages
 db.js                PostgreSQL pool (reads .env; PGSCHEMA sets search_path)
 lib/stockTable.js    Table name, column mapping, row-preference order for company_profiles
 routes/stocks.js     The API
 lib/                 Shared logic: Yahoo client, CUSIP lookup, update, detail fill, CSV
 scripts/             Command-line tools
+public/              Frontend: shared.js (translations, Tailwind UI components), index.html + app.js, stock.html + stock.js
+styles/tailwind.css  Tailwind CSS input; npm run build compiles it to public/build/app.css (gitignored)
 ```
