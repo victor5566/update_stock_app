@@ -10,7 +10,7 @@ The data lives in an existing shared table, **`test.company_profiles`**, in the 
 Stack:
 
 - **Backend:** Node.js + Express
-- **Frontend:** plain HTML / CSS / JavaScript, with no build step
+- **Frontend:** React 18 (loaded from node_modules, no bundler), with no build step
 - **External data sources:** Yahoo Finance (`yahoo-finance2`), NASDAQ Trader symbol directory, SEC EDGAR, quantumonline.com
 
 ---
@@ -169,5 +169,5 @@ lib/stockTable.js    Table name, column mapping, row-preference order for compan
 routes/stocks.js     The API
 lib/                 Shared logic: Yahoo client, CUSIP lookup, update, detail fill, CSV
 scripts/             Command-line tools
-public/              Frontend (index.html + app.js, stock.html + stock.js, styles.css)
+public/              Frontend, React without a bundler (index.html + app.js, stock.html + stock.js, styles.css)
 ```

@@ -41,6 +41,19 @@ for (const dep of Object.keys(dependencies)) {
   }
 }
 
+// The frontend loads React's UMD builds (served by server.js under /vendor/); React 19 dropped
+// them, so an upgrade past 18 would leave the pages blank.
+// (Checked by path: the packages' "exports" don't expose umd/ to require.resolve.)
+for (const [pkg, file] of [['react', 'umd/react.production.min.js'], ['react-dom', 'umd/react-dom.production.min.js']]) {
+  let found = false;
+  try {
+    found = fs.existsSync(path.join(path.dirname(require.resolve(`${pkg}/package.json`, { paths: [ROOT] })), file));
+  } catch {
+    // package missing - reported with the dependencies above
+  }
+  if (!found) errors.push(`${pkg}/${file} not found - the frontend needs React 18's UMD build (npm install react@18 react-dom@18)`);
+}
+
 // 4. .env must be UTF-8: dotenv reads a UTF-16 file (what Windows PowerShell 5.1's `>` writes) as
 // no settings at all, and the app then can't reach the database.
 const envPath = path.join(ROOT, '.env');

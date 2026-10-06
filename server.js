@@ -23,6 +23,12 @@ app.get('/config.js', (req, res) => {
   res.send(`window.APP_CONFIG = ${JSON.stringify({ publicUrl: PUBLIC_URL, apiBase: `${PUBLIC_URL}/api` })};\n`);
 });
 
+// The frontend is React without a bundler: the pages load React's UMD builds, served here
+// straight from node_modules (no CDN, no build step).
+for (const pkg of ['react', 'react-dom']) {
+  app.use(`/vendor/${pkg}`, express.static(path.join(path.dirname(require.resolve(`${pkg}/package.json`)), 'umd')));
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/stocks', stocksRouter);
