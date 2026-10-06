@@ -1,7 +1,8 @@
 # Runs ON THE SERVER, sent over ssh by setup-server.sh / deploy.sh / rollback.sh with the settings
 # (APP_DIR, APP_USER, SERVICE_NAME, NODE_VERSION, APP_TZ, KEEP_RELEASES, DEPLOY_USER) in the environment.
 #   remote.sh setup [env-file]   one-time provisioning, as root
-#   remote.sh activate <release> install deps, switch current, restart, health check (rolls back on failure)
+#   remote.sh activate <release> npm install, npm run build (Tailwind CSS), switch current, restart,
+#                                health check (rolls back on failure)
 #   remote.sh rollback [release] switch current to the given / previous release
 #   remote.sh list               list releases
 set -euo pipefail

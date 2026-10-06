@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deploys a commit (default HEAD) to the server: uploads it as a new release, installs production
-# dependencies, switches $APP_DIR/current to it, restarts the service and checks it answers.
+# dependencies, builds the web UI's CSS (npm run build), switches $APP_DIR/current to it, restarts
+# the service and checks it answers.
 # If the new release doesn't come up, the previous one is restored.
 #
 #   deploy/deploy.sh [git-ref]

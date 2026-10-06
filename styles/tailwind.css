@@ -1,0 +1,5 @@
+/* Tailwind CSS input. `npm run build` compiles it to public/build/app.css (gitignored), scanning
+   the frontend files in public/ for the class names they use. */
+@import "tailwindcss" source(none);
+@source "../public/*.js";
+@source "../public/*.html";
