@@ -1,0 +1,22 @@
+# Copy to deploy/deploy.conf (gitignored) and fill in. Read by setup-server.sh, deploy.sh and rollback.sh.
+
+# SSH target: the user that runs the deploys (needs sudo on the server for setup-server.sh only)
+DEPLOY_HOST=203.0.113.10
+DEPLOY_USER=deploy
+DEPLOY_SSH_PORT=22
+# Optional: private key to use instead of the ssh-agent / ~/.ssh defaults
+# DEPLOY_SSH_KEY=~/.ssh/id_rsa
+
+# Layout on the server: $APP_DIR/releases/<time>-<commit>, $APP_DIR/current -> the live release,
+# $APP_DIR/shared/.env (the server's own .env, linked into every release)
+APP_DIR=/opt/stock-app
+# System user the service runs as (created by setup-server.sh, no login shell)
+APP_USER=stockapp
+SERVICE_NAME=stock-app
+
+# Node major version installed by setup-server.sh (via `n`) when the server has none >= 22.8.0
+NODE_VERSION=22
+# Time zone for the service - MONITOR_DAILY_AT in .env is in this time zone
+APP_TZ=Asia/Taipei
+# Releases kept on the server for rollback.sh
+KEEP_RELEASES=5
