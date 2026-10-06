@@ -6,7 +6,7 @@
 
 一個股票代碼維護系統：後端是純 Node.js/Express，前端是不需建置流程的 React（React 18 UMD，不用打包工具），資料存在 PostgreSQL。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
 
-**資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle_test` 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql` / `ddl_test_schema.txt`）。
+**資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle_test` 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql`）。
 
 ## 常用指令
 
@@ -99,7 +99,7 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `fill-company-details.js [代號...]`／`fill-cusip.js [代號...]`——用上述函式庫補資料。不指定代號時，會處理所有**未下市**且有空白欄位的資料——在這張表裡有數萬筆，很多是非美股（SEC/quantumonline 查不到），所以建議指定代號。
 - `monitor-stocks.js [--apply] [--list] [代號...]`——在命令列執行股票偵測（見上方）。
 - `audit-stocks.js [--out 路徑.csv]`——**唯讀**交叉比對未下市的 NASDAQ/NYSE/AMEX/OTC 資料（其他市場略過——來源不認得它們）與 NASDAQ Trader 清單、SEC 的 `company_tickers.json`、Yahoo，輸出 `exports/audit-report.csv`（不進 git）供人工檢查：代號變更、下市、名稱被截斷、名稱不符（只有兩個來源一致反對我們時才報）。依結果用 `applyStockUpdate` 修改；下市請設 `isdelisted = true`，絕不刪除。
-- `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與清單的 **匯出 CSV** 按鈕共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案很大——commit 前請三思。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
+- `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與清單的 **匯出 CSV** 按鈕共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
 
 **前端**（`public/`）是不打包、不需建置的 React——依使用者要求只用 React（不用 Vite、router、JSX）。多頁面架構：`index.html` + `app.js` 是主介面，`stock.html` + `stock.js` 是個股詳細頁；每個 HTML 只有 `<div id="root">` 和 script。React 18 的 UMD 檔案來自 `node_modules`，由 `server.js` 在 `/vendor/react/`、`/vendor/react-dom/` 提供（不用 CDN）；React 19 已不提供 UMD，請維持 18 版——缺少 UMD 檔案時 `npm run build` 會失敗。元件用 `const h = React.createElement` 撰寫，不用 JSX。元素 id 與 class 和舊版原生頁面相同，所以 `styles.css`（包括 `#submit-btn`、`#market-form` 等規則）不需修改。延伸時請遵循：
 - 表單樣式是通用的（`.form-section form`，3 欄格線；`#market-form` 用 4 欄；寬度小於 720px 時變 1 欄）——新表單會自動套用。以前是逐一用表單 id 寫樣式，新表單就沒有樣式。
