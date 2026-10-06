@@ -141,6 +141,8 @@ cmd_activate() {
   ln -sfn "$SHARED/.env" "$dir/.env"
   log "npm ci (production dependencies) with Node $(node -v)"
   (cd "$dir" && npm ci --omit=dev --no-audit --no-fund --update-notifier=false --loglevel=error)
+  log "npm run build"
+  (cd "$dir" && npm run build --silent --update-notifier=false)
 
   [ -L "$CURRENT" ] && prev="$(readlink -f "$CURRENT")"
   log "Switching current -> releases/$name"
