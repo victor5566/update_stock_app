@@ -3,59 +3,167 @@ const pool = require('../db');
 const { applyStockUpdate } = require('../lib/applyStockUpdate');
 const { isValidCusip } = require('../lib/validateCusip');
 const { fillCompanyDetails } = require('../lib/fillCompanyDetails');
-const { lookupCusip } = require('../lib/cusipLookup');
+const { lookupCusip, findCusipConflict } = require('../lib/cusipLookup');
 const { lookupStock, YahooLookupError, symbolsEquivalent } = require('../lib/yahoo');
 const { getCachedListing } = require('../lib/nasdaqTrader');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
 const { sameCompany } = require('../lib/normalizeCompanyName');
+const { EXPORT_COLUMNS, toCsv } = require('../lib/stockCsv');
+const { TABLE, ID, SELECT_COLUMNS, writeColumn, isBlank, PREFERRED_ORDER } = require('../lib/stockTable');
 
 const router = express.Router();
 
 const LISTED_MARKETS = new Set(['NASDAQ', 'NYSE', 'AMEX']);
 
-// The stock we already hold under an equivalent spelling of `symbol` ("BRK-B" for "BRK.B"),
-// or null. The UNIQUE constraint only catches the exact spelling. `exceptId` skips the row
-// being edited.
+const escapeLike = (str) => str.replace(/[\\%_]/g, '\\$&');
+
+// The live stock we already hold under `symbol` or an equivalent spelling ("BRK-B" for
+// "BRK.B"), or null. Delisted rows don't block: the table keeps a recycled ticker's old row
+// next to the new owner's. `exceptId` skips the row being edited.
 async function findEquivalentStock(symbol, exceptId = null) {
   const root = symbol.split(/[.-]/)[0];
   const { rows } = await pool.query(
-    `SELECT id, stock_symbol FROM stocks WHERE stock_symbol = $1 OR stock_symbol LIKE $2 OR stock_symbol LIKE $3`,
-    [root, `${root}.%`, `${root}-%`]
+    `SELECT ${ID} AS id, stock_symbol FROM ${TABLE}
+     WHERE (stock_symbol = $1 OR stock_symbol LIKE $2 OR stock_symbol LIKE $3)
+       AND NOT coalesce(isdelisted, false)`,
+    [root, `${escapeLike(root)}.%`, `${escapeLike(root)}-%`]
   );
   return rows.find((r) => r.id !== Number(exceptId) && symbolsEquivalent(r.stock_symbol, symbol)) || null;
 }
 
-// Fire-and-forget: fetches company details + CUSIP for a freshly manually-added stock and
-// writes them in once they arrive, without making the add request wait on any of it. Only
-// called when the add didn't already specify any detail fields itself (see the POST handler)
-// - the web form only ever submits stock_symbol/company_name/exchange, so this is what turns
-// that bare row into a fully-populated one a few seconds later, the same data
+// Fetches company details + CUSIP for a freshly manually-added stock and writes them in.
+// Only called when the add didn't already specify any detail fields itself (see the POST
+// handler) - the web form only ever submits stock_symbol/company_name/exchange, so this is
+// what turns that bare row into a fully-populated one, the same data
 // scripts/fill-company-details.js and scripts/fill-cusip.js would have produced by hand.
-async function autoFillNewStock(stock) {
+// The POST waits for the first pass (per the user: an add should come back with everything
+// it can find, and say on screen why anything is missing) - the report below is that "why".
+//
+// A brand-new listing often isn't in the sources yet when it's added (VYLR: Yahoo had no
+// profile at add time, a full one later the same day; SEC has no 13G yet), so whatever is
+// still missing is retried after each of AUTO_FILL_RETRY_MS. In-process only - a server
+// restart drops pending retries, which the fill-* scripts then catch on their next run.
+const AUTO_FILL_RETRY_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000];
+// The add answers after this even if a source is slow; the lookup carries on regardless.
+const ADD_LOOKUP_TIMEOUT_MS = 20 * 1000;
+
+// stock id -> the latest auto-fill report, so the detail page can say why a field is empty
+// and when it's retried. In-process like the retries themselves.
+const autoFillStatus = new Map();
+
+// Report shape (sent to the UI as `autofill`):
+//   details: { status: 'filled' | 'not_found' | 'error' | 'skipped', message? }
+//   cusip:   { status: 'filled' | 'not_found' | 'conflict' | 'error' | 'skipped',
+//              cusip?, source?, reasons? (from lookupCusip), conflict_symbol?, message? }
+//   attempts, next_retry_at (ISO) | null, retries_exhausted
+async function autoFillNewStock(stock, attempt = 0, todo = { details: true, cusip: true }) {
+  const pass = await autoFillOnce(stock, todo);
+  const previous = autoFillStatus.get(stock.id) || {};
+  const report = {
+    // A part that wasn't re-tried keeps its earlier result.
+    details: todo.details ? pass.details : previous.details || { status: 'skipped' },
+    cusip: todo.cusip ? pass.cusip : previous.cusip || { status: 'skipped' },
+    attempts: attempt + 1,
+    next_retry_at: null,
+    retries_exhausted: false,
+  };
+
+  // Retry only what a later try could change: "not found yet" or a failed request. A CUSIP
+  // conflict needs a human, not another lookup.
+  const next = {
+    details: ['not_found', 'error'].includes(report.details.status),
+    cusip: ['not_found', 'error'].includes(report.cusip.status),
+  };
+  if (next.details || next.cusip) {
+    if (attempt < AUTO_FILL_RETRY_MS.length) {
+      report.next_retry_at = new Date(Date.now() + AUTO_FILL_RETRY_MS[attempt]).toISOString();
+      setTimeout(() => retryAutoFill(stock.id, attempt + 1, next), AUTO_FILL_RETRY_MS[attempt]).unref();
+    } else {
+      report.retries_exhausted = true;
+      console.log(`[auto-fill] ${stock.stock_symbol}: still missing ${[next.details && 'details', next.cusip && 'cusip'].filter(Boolean).join(' + ')} after ${attempt + 1} tries - left for scripts/fill-*.js`);
+    }
+  }
+  autoFillStatus.set(stock.id, report);
+  return report;
+}
+
+async function retryAutoFill(stockId, attempt, todo) {
+  try {
+    // Re-read: the stock may have been renamed or filled in by hand meanwhile.
+    const { rows } = await pool.query(
+      `SELECT ${ID} AS id, stock_symbol, company_name, sector, description, cusips FROM ${TABLE} WHERE ${ID} = $1`,
+      [stockId]
+    );
+    const current = rows[0];
+    if (!current) {
+      autoFillStatus.delete(stockId);
+      return;
+    }
+    const stillTodo = {
+      details: todo.details && isBlank(current.sector) && isBlank(current.description),
+      cusip: todo.cusip && isBlank(current.cusips),
+    };
+    if (!stillTodo.details && !stillTodo.cusip) {
+      autoFillStatus.delete(stockId); // filled some other way - nothing left to explain
+      return;
+    }
+    await autoFillNewStock(current, attempt, stillTodo);
+  } catch (err) {
+    console.error(`[auto-fill] stock ${stockId}: retry failed - ${err.message}`);
+  }
+}
+
+// One pass; resolves to { details, cusip } in the report shape above.
+async function autoFillOnce(stock, todo) {
+  // Raw listing names let lib/cusipLookup.js tell a preferred/note/warrant from the common.
+  const listing = todo.cusip ? await getCachedListing().catch(() => null) : null;
   const [detailsResult, cusipResult] = await Promise.allSettled([
-    fillCompanyDetails(pool, stock),
-    lookupCusip(stock.stock_symbol, {
+    todo.details ? fillCompanyDetails(pool, stock) : Promise.resolve(null),
+    todo.cusip ? lookupCusip(stock.stock_symbol, {
       // A new add is often a new or recycled ticker, exactly where quantumonline (keyed by
       // ticker) can still show the previous issuer - the name check in lib/cusipLookup.js.
       companyName: stock.company_name,
+      listing: listing || undefined,
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
-    }),
+    }) : Promise.resolve(null),
   ]);
 
-  if (detailsResult.status === 'fulfilled') {
-    if (detailsResult.value) console.log(`[auto-fill] ${stock.stock_symbol}: company details filled`);
-  } else {
-    console.error(`[auto-fill] ${stock.stock_symbol}: company details failed - ${detailsResult.reason.message}`);
+  let details = { status: 'skipped' };
+  if (todo.details) {
+    if (detailsResult.status === 'rejected') {
+      details = { status: 'error', message: detailsResult.reason.message };
+      console.error(`[auto-fill] ${stock.stock_symbol}: company details failed - ${details.message}`);
+    } else if (detailsResult.value) {
+      details = { status: 'filled' };
+      console.log(`[auto-fill] ${stock.stock_symbol}: company details filled`);
+    } else {
+      details = { status: 'not_found' };
+      console.log(`[auto-fill] ${stock.stock_symbol}: no company details on Yahoo yet`);
+    }
   }
 
-  if (cusipResult.status === 'fulfilled') {
-    if (cusipResult.value.cusip) {
-      await pool.query('UPDATE stocks SET cusips = $1, updated_at = now() WHERE id = $2', [cusipResult.value.cusip, stock.id]);
-      console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${cusipResult.value.source})`);
+  let cusip = { status: 'skipped' };
+  if (todo.cusip) {
+    if (cusipResult.status === 'rejected') {
+      cusip = { status: 'error', message: cusipResult.reason.message };
+      console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusip.message}`);
+    } else {
+      const { cusip: found, source, reasons } = cusipResult.value;
+      const conflict = found && await findCusipConflict(pool, found, { stockId: stock.id });
+      if (conflict) {
+        cusip = { status: 'conflict', cusip: found, source, conflict_symbol: conflict.stock_symbol };
+        console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
+      } else if (found) {
+        await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [found, stock.id]);
+        cusip = { status: 'filled', cusip: found, source };
+        console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
+      } else {
+        cusip = { status: 'not_found', reasons };
+        console.log(`[auto-fill] ${stock.stock_symbol}: no cusip found yet (${reasons.map((r) => `${r.source}: ${r.code}`).join('; ')})`);
+      }
     }
-  } else {
-    console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusipResult.reason.message}`);
   }
+  return { details, cusip };
 }
 
 const DETAIL_FIELDS = [
@@ -63,14 +171,17 @@ const DETAIL_FIELDS = [
   'currency', 'company_location', 'urll', 'description', 'ceo',
 ];
 
+// company_profiles spans many markets: "000001.SZ", "3-Jun.DE", "^GSPC", "ACIC_old".
+const SYMBOL_PATTERN = /^[A-Za-z0-9.\-_^=& ]{1,50}$/;
+
 function validateStockInput({ stock_symbol, company_name, exchange }, { partial = false } = {}) {
   const errors = [];
 
   if (!partial || stock_symbol !== undefined) {
     if (!stock_symbol || typeof stock_symbol !== 'string' || !stock_symbol.trim()) {
       errors.push('stock_symbol is required');
-    } else if (!/^[A-Za-z.\-]{1,50}$/.test(stock_symbol.trim())) {
-      errors.push('stock_symbol must be 1-50 letters (may include "." or "-")');
+    } else if (!SYMBOL_PATTERN.test(stock_symbol.trim())) {
+      errors.push('stock_symbol must be 1-50 letters/digits (may include . - _ ^ = & or spaces)');
     }
   }
 
@@ -115,32 +226,92 @@ function extractDetailFields(body) {
   return fields;
 }
 
-// GET /api/stocks?market=NASDAQ&q=apple&source=manual
+// WHERE clause for the stock list's filters (?market=&q=). Shared by the list and its CSV
+// export so the export is always exactly what the list shows.
+function buildStockFilter({ market, q }) {
+  const conditions = [];
+  const params = [];
+
+  if (market) {
+    params.push(market);
+    conditions.push(`exchange = $${params.length}`);
+  }
+  if (q) {
+    params.push(`%${escapeLike(q)}%`);
+    conditions.push(`(stock_symbol ILIKE $${params.length} OR company_name ILIKE $${params.length})`);
+  }
+
+  return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
+}
+
+// GET /api/stocks/export.csv?market=OTC&q=bank - the stock list's "Export CSV" button.
+// All columns (lib/stockCsv.js), UTF-8 with a BOM so Excel shows "Latécoère" correctly,
+// downloaded as e.g. stocks_OTC_bank_2026-09-30.csv.
+router.get('/export.csv', async (req, res, next) => {
+  try {
+    const { where, params } = buildStockFilter(req.query);
+    const result = await pool.query(
+      `SELECT ${EXPORT_COLUMNS.join(', ')} FROM ${TABLE} ${where} ORDER BY stock_symbol ASC, ${ID} ASC`,
+      params
+    );
+    const nameParts = ['stocks', req.query.market || 'all', req.query.q, new Date().toISOString().slice(0, 10)]
+      .filter(Boolean)
+      .map((part) => String(part).replace(/[^A-Za-z0-9.-]+/g, '_'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nameParts.join('_')}.csv"`);
+    res.send('﻿' + toCsv(result.rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const MAX_PAGE_SIZE = 100;
+
+// GET /api/stocks?market=NASDAQ&q=apple&page=1&pageSize=15 - one page of the stock list.
+// The table is far too big (~79k rows) to send whole, so it's paginated here, not in the
+// browser. Answers { rows, total, page, pageSize }.
 router.get('/', async (req, res, next) => {
   try {
-    const { market, q, source } = req.query;
-    const conditions = [];
-    const params = [];
-
-    if (market) {
-      params.push(market);
-      conditions.push(`exchange = $${params.length}`);
-    }
-    if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`(stock_symbol ILIKE $${params.length} OR company_name ILIKE $${params.length})`);
-    }
-    if (source) {
-      params.push(source);
-      conditions.push(`source = $${params.length}`);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const orderBy = source ? 'created_at DESC' : 'stock_symbol ASC';
+    const { where, params } = buildStockFilter(req.query);
+    const pageSize = Math.min(Math.max(1, Number.parseInt(req.query.pageSize, 10) || 15), MAX_PAGE_SIZE);
+    const total = Number((await pool.query(`SELECT count(*) FROM ${TABLE} ${where}`, params)).rows[0].count);
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, Number.parseInt(req.query.page, 10) || 1), pages);
     const result = await pool.query(
-      `SELECT id, stock_symbol, company_name, exchange, source, created_at, updated_at
-       FROM stocks ${where} ORDER BY ${orderBy}`,
+      `SELECT ${ID} AS id, stock_symbol, company_name, exchange, isdelisted, updated_at
+       FROM ${TABLE} ${where} ORDER BY stock_symbol ASC, ${ID} ASC
+       LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
       params
+    );
+    res.json({ rows: result.rows, total, page, pageSize });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stocks/markets - every distinct exchange value, for the market filter and the
+// add form's market suggestions.
+router.get('/markets', async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT exchange FROM ${TABLE} WHERE exchange IS NOT NULL AND exchange <> '' ORDER BY exchange`
+    );
+    res.json(result.rows.map((r) => r.exchange));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stocks/suggest?q=AA - symbols starting with q, for the symbol inputs' autocomplete.
+router.get('/suggest', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const result = await pool.query(
+      `SELECT DISTINCT ON (stock_symbol) stock_symbol, company_name FROM ${TABLE}
+       WHERE upper(stock_symbol) LIKE upper($1)
+       ORDER BY stock_symbol, ${PREFERRED_ORDER} LIMIT 20`,
+      [`${escapeLike(q)}%`]
     );
     res.json(result.rows);
   } catch (err) {
@@ -148,18 +319,28 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/stocks/by-symbol/AAPL
+// For a stock added in this server's lifetime whose auto-fill left something empty, the
+// detail page explains why (see autoFillNewStock).
+function withAutoFill(stock) {
+  const autofill = autoFillStatus.get(stock.id);
+  return autofill ? { ...stock, autofill } : stock;
+}
+
+// GET /api/stocks/by-symbol/AAPL - case-insensitive. A symbol can have several rows (a
+// recycled ticker keeps its delisted row), so this picks one: an exact-case match first, then
+// the live row, then the newest. The list links to /:id-specific URLs for the others.
 router.get('/by-symbol/:symbol', async (req, res, next) => {
   try {
-    const symbol = req.params.symbol.trim().toUpperCase();
+    const symbol = req.params.symbol.trim();
     const result = await pool.query(
-      `SELECT * FROM stocks WHERE stock_symbol = $1`,
+      `SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE upper(stock_symbol) = upper($1)
+       ORDER BY (stock_symbol = $1) DESC, ${PREFERRED_ORDER} LIMIT 1`,
       [symbol]
     );
     if (!result.rows.length) {
       return res.status(404).json({ errors: ['stock not found'] });
     }
-    res.json(result.rows[0]);
+    res.json(withAutoFill(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -214,11 +395,11 @@ router.get('/yahoo-lookup/:symbol', async (req, res, next) => {
 // GET /api/stocks/:id - full company detail record, for the read-only detail view.
 router.get('/:id(\\d+)', async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT * FROM stocks WHERE id = $1', [req.params.id]);
+    const result = await pool.query(`SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE ${ID} = $1`, [req.params.id]);
     if (!result.rows.length) {
       return res.status(404).json({ errors: ['stock not found'] });
     }
-    res.json(result.rows[0]);
+    res.json(withAutoFill(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -242,21 +423,33 @@ router.post('/', async (req, res, next) => {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: existing.stock_symbol });
     }
 
-    const columns = ['stock_symbol', 'company_name', 'exchange', 'source', ...Object.keys(detailFields)];
-    const values = [stock_symbol, company_name, exchange, 'manual', ...Object.values(detailFields)];
+    const columns = ['stock_symbol', 'company_name', 'exchange', ...Object.keys(detailFields)].map(writeColumn);
+    const values = [stock_symbol, company_name, exchange, ...Object.values(detailFields)];
     const placeholders = values.map((_, i) => `$${i + 1}`);
 
     const result = await pool.query(
-      `INSERT INTO stocks (${columns.join(', ')})
-       VALUES (${placeholders.join(', ')}) RETURNING *`,
+      `INSERT INTO ${TABLE} (${columns.join(', ')})
+       VALUES (${placeholders.join(', ')}) RETURNING ${SELECT_COLUMNS}`,
       values
     );
     const inserted = result.rows[0];
-    res.status(201).json(inserted);
-
-    if (!Object.keys(detailFields).length) {
-      autoFillNewStock(inserted).catch((err) => console.error(`[auto-fill] ${inserted.stock_symbol}: ${err.message}`));
+    if (Object.keys(detailFields).length) {
+      return res.status(201).json(inserted);
     }
+
+    // Wait for the first lookup pass so the response carries the filled row and, for
+    // anything still missing, why (`autofill`). A slow source only delays it up to
+    // ADD_LOOKUP_TIMEOUT_MS; the pass then finishes (and retries) in the background.
+    const filling = autoFillNewStock(inserted);
+    filling.catch((err) => console.error(`[auto-fill] ${inserted.stock_symbol}: ${err.message}`));
+    let timer;
+    const autofill = await Promise.race([
+      filling.catch(() => null),
+      new Promise((resolve) => { timer = setTimeout(() => resolve({ pending: true }), ADD_LOOKUP_TIMEOUT_MS); }),
+    ]);
+    clearTimeout(timer);
+    const { rows } = await pool.query(`SELECT ${SELECT_COLUMNS} FROM ${TABLE} WHERE ${ID} = $1`, [inserted.id]);
+    res.status(201).json({ ...(rows[0] || inserted), autofill });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: req.body.stock_symbol.trim().toUpperCase() });
@@ -265,8 +458,8 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/stocks/:id
-router.put('/:id', async (req, res, next) => {
+// PUT /api/stocks/:id. There is no DELETE: the app may only read, add and update this table.
+router.put('/:id(\\d+)', async (req, res, next) => {
   const { id } = req.params;
   const errors = [...validateStockInput(req.body, { partial: true }), ...validateDetailFields(req.body)];
   if (errors.length) {
@@ -293,59 +486,17 @@ router.put('/:id', async (req, res, next) => {
     }
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    const updated = await applyStockUpdate(client, id, fields);
+    const updated = await applyStockUpdate(pool, id, fields);
     if (!updated) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ errors: ['stock not found'] });
     }
-
-    await client.query('COMMIT');
     res.json(updated);
   } catch (err) {
-    await client.query('ROLLBACK');
     if (err.code === '23505') {
       return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: fields.stock_symbol });
     }
     next(err);
-  } finally {
-    client.release();
-  }
-});
-
-// DELETE /api/stocks/:id
-router.delete('/:id', async (req, res, next) => {
-  const { id } = req.params;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      'DELETE FROM stocks WHERE id = $1 RETURNING stock_symbol, company_name, exchange',
-      [id]
-    );
-    if (!result.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ errors: ['stock not found'] });
-    }
-
-    const deleted = result.rows[0];
-    await client.query(
-      `INSERT INTO stock_deletion_log (stock_symbol, company_name, exchange)
-       VALUES ($1, $2, $3)`,
-      [deleted.stock_symbol, deleted.company_name, deleted.exchange]
-    );
-
-    await client.query('COMMIT');
-    res.status(204).send();
-  } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
   }
 });
 

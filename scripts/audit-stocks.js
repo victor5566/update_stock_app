@@ -21,6 +21,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const pool = require('../db');
+const { TABLE, ID } = require('../lib/stockTable');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
 const { normalizeCompanyName, isTruncationOf, sameCompany } = require('../lib/normalizeCompanyName');
 const { loadNasdaqTraderListing } = require('../lib/nasdaqTrader');
@@ -80,7 +81,12 @@ async function main() {
   console.log('Downloading NASDAQ Trader directory and SEC ticker list...');
   const [listing, sec] = await Promise.all([loadNasdaqTrader(), loadSec()]);
   // Already-flagged delistings are known; don't keep re-reporting them.
-  const { rows: stocks } = await pool.query('SELECT id, stock_symbol, company_name, exchange FROM stocks WHERE NOT isdelisted ORDER BY stock_symbol');
+  // Only US markets: the sources below know nothing about the table's other exchanges.
+  const { rows: stocks } = await pool.query(
+    `SELECT ${ID} AS id, stock_symbol, company_name, exchange FROM ${TABLE}
+     WHERE NOT coalesce(isdelisted, false) AND exchange IN ('NASDAQ', 'NYSE', 'AMEX', 'OTC')
+     ORDER BY stock_symbol`
+  );
   const ours = new Set(stocks.map((s) => s.stock_symbol));
   console.log('Fetching Yahoo names...');
   const yahooNames = await loadYahooNames(stocks.map((s) => s.stock_symbol));
