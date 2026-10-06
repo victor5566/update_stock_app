@@ -14,9 +14,12 @@
 npm install
 npm start          # node server.js
 npm run dev         # node --watch server.js
+npm run build       # 部署前檢查（scripts/build.js）
 ```
 
-目前沒有設定測試或 lint 指令。
+目前沒有設定測試或 lint 指令。專案沒有需要編譯的東西；`npm run build`（`scripts/build.js`）是每次部署都會跑的部署前檢查——`deploy/remote.sh` 在切換版本前執行，`company_profiles` repo 的 GitHub Actions `deploy.yml` 也會執行——遇到 Node 版本 < 22.8.0 或為 v22.7.0、JS 語法錯誤、缺少相依套件時會讓部署失敗（缺資料庫設定只警告）。它不會連資料庫。
+
+**部署**：`deploy/setup-server.sh`（一次）、`deploy/deploy.sh [ref]`、`deploy/rollback.sh`——systemd 服務，版本放在 `/opt/stock-app`，伺服器有自己的 `shared/.env`，服務時區 `America/New_York`。手冊：`docs/Deployment_Guide_{zh-TW,en}.docx`。`company_profiles` repo 另外用自己的 `.github/workflows/deploy.yml` 部署（LXC 容器內的 PM2，push 到 main/dev/test 時觸發）。
 
 整個專案在 WSL（Linux）中開發與執行，雖然專案資料夾實際放在 Windows 檔案系統（從 WSL 看是 `/mnt/c/Users/...`）。所有 `node`／`npm` 指令都要在 WSL shell 裡執行，不要用 PowerShell。從 Windows 連 `localhost:3000` 依賴 WSL 的 localhost 轉發，這個轉發曾經壞掉（沒有 `wslrelay` 在跑）；用 WSL 的 IP（`wsl hostname -I`）仍然可以連。
 
@@ -32,7 +35,7 @@ npm run dev         # node --watch server.js
 
 ### Git
 
-repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `main`），Windows 和 WSL 兩邊都能 push。Windows 的 git 用 Git Credential Manager 快取的 HTTPS 憑證。WSL（使用者 `root`）有自己的 SSH key（`/root/.ssh/id_rsa`，RSA 4096，2026-10-01 加到 victor5566 GitHub 帳號），並有只在 WSL 生效的全域規則 `url."git@github.com:".insteadOf "https://github.com/"`，所以同樣的 `https://` remote 在 WSL 會自動走 SSH。Windows 也有 SSH key（`C:\Users\victo\.ssh\id_rsa`，RSA 4096，2026-10-01 加到 GitHub），但 Windows 的 git 繼續用 HTTPS——`origin` 請維持 `https://` 網址，兩邊都不必各自設定 remote（`.git` 是共用的）。第二個 remote 是 `company_profiles`（https://github.com/infocast-tw/company_profiles——由 `infocast-tw/LevelFields` 改名而來，remote 原名 `levelfields`；分支 `dev`，透過本地 `levelfields-dev` 分支合併），但 Claude Code 的 auto mode 會把推送到那裡視為資料外流而擋下，即使使用者在對話中同意也一樣——那個 push 由使用者自己執行。
+repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `main`），Windows 和 WSL 兩邊都能 push。Windows 的 git 用 Git Credential Manager 快取的 HTTPS 憑證。WSL（使用者 `root`）有自己的 SSH key（`/root/.ssh/id_rsa`，RSA 4096，2026-10-01 加到 victor5566 GitHub 帳號），並有只在 WSL 生效的全域規則 `url."git@github.com:".insteadOf "https://github.com/"`，所以同樣的 `https://` remote 在 WSL 會自動走 SSH。Windows 也有 SSH key（`C:\Users\victo\.ssh\id_rsa`，RSA 4096，2026-10-01 加到 GitHub），但 Windows 的 git 繼續用 HTTPS——`origin` 請維持 `https://` 網址，兩邊都不必各自設定 remote（`.git` 是共用的）。第二個 remote 是 `company_profiles`（https://github.com/infocast-tw/company_profiles——由 `infocast-tw/LevelFields` 改名而來，remote 原名 `levelfields`；分支 `dev`，透過本地 `levelfields-dev` 分支合併）。**那個分支有 commit 進去的 `.env`**，所以 `git checkout levelfields-dev` 會默默蓋掉本機（gitignore 的）`.env`，切回 `main` 時又會把它刪掉——請先備份，或在另一個 `git worktree` 裡合併。Claude Code 的 auto mode 會把推送到那裡視為資料外流而擋下，即使使用者在對話中同意也一樣——那個 push 由使用者自己執行。
 
 ## 架構
 

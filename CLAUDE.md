@@ -14,9 +14,12 @@ A stock symbol maintenance app: a plain Node.js/Express backend, a no-build-step
 npm install
 npm start          # node server.js
 npm run dev         # node --watch server.js
+npm run build       # pre-deploy check (scripts/build.js)
 ```
 
-No test suite or lint script is configured.
+No test suite or lint script is configured. There is nothing to compile; `npm run build` (`scripts/build.js`) is the pre-deploy check that every deploy runs - `deploy/remote.sh` before switching releases, and the `company_profiles` repo's GitHub Actions `deploy.yml` - and fails the deploy on a Node version that is < 22.8.0 or v22.7.0, a JS syntax error, or a missing dependency (missing DB settings only warn). It doesn't touch the database.
+
+**Deployment**: `deploy/setup-server.sh` (once), `deploy/deploy.sh [ref]`, `deploy/rollback.sh` - systemd service, releases under `/opt/stock-app`, the server's own `shared/.env`, service time zone `America/New_York`. Guide: `docs/Deployment_Guide_{zh-TW,en}.docx`. The `company_profiles` repo deploys separately via its `.github/workflows/deploy.yml` (PM2 in an LXC container, on push to main/dev/test).
 
 The app is developed and run inside WSL (Linux), even though the project directory is on the Windows filesystem (`/mnt/c/Users/...` from WSL). Run all `node`/`npm` commands from a WSL shell, not PowerShell. From Windows, `localhost:3000` relies on WSL's localhost forwarding, which has been seen broken (no `wslrelay` running); the WSL IP (`wsl hostname -I`) still works.
 
@@ -32,7 +35,7 @@ The role can't read most of `pg_catalog` (`pg_namespace`, `pg_tables` -> permiss
 
 ### Git
 
-The repo's `origin` is https://github.com/victor5566/update_stock_app (branch `main`). Pushes work from either side. Windows git uses a cached HTTPS credential (Git Credential Manager). WSL (user `root`) has its own SSH key (`/root/.ssh/id_rsa`, RSA 4096, added to the victor5566 GitHub account on 2026-10-01) plus a WSL-only global rule `url."git@github.com:".insteadOf "https://github.com/"`, so WSL transparently uses SSH for the same `https://` remote URLs. Windows also has an SSH key (`C:\Users\victo\.ssh\id_rsa`, RSA 4096, added to GitHub 2026-10-01), but Windows git keeps using HTTPS - leave `origin` as the `https://` URL so both sides work without per-side remote config (`.git` is shared). A second remote, `company_profiles` (https://github.com/infocast-tw/company_profiles - renamed from `infocast-tw/LevelFields`, remote formerly named `levelfields`; branch `dev`, merged via a local `levelfields-dev` branch), exists, but Claude Code's auto mode blocks pushing there as data exfiltration even with the user's in-chat consent - the user runs that push themselves.
+The repo's `origin` is https://github.com/victor5566/update_stock_app (branch `main`). Pushes work from either side. Windows git uses a cached HTTPS credential (Git Credential Manager). WSL (user `root`) has its own SSH key (`/root/.ssh/id_rsa`, RSA 4096, added to the victor5566 GitHub account on 2026-10-01) plus a WSL-only global rule `url."git@github.com:".insteadOf "https://github.com/"`, so WSL transparently uses SSH for the same `https://` remote URLs. Windows also has an SSH key (`C:\Users\victo\.ssh\id_rsa`, RSA 4096, added to GitHub 2026-10-01), but Windows git keeps using HTTPS - leave `origin` as the `https://` URL so both sides work without per-side remote config (`.git` is shared). A second remote, `company_profiles` (https://github.com/infocast-tw/company_profiles - renamed from `infocast-tw/LevelFields`, remote formerly named `levelfields`; branch `dev`, merged via a local `levelfields-dev` branch), exists. **That branch tracks a committed `.env`**, so `git checkout levelfields-dev` silently overwrites the local (gitignored) `.env` and switching back to `main` deletes it - back it up first, or merge in a separate `git worktree`. Claude Code's auto mode blocks pushing there as data exfiltration even with the user's in-chat consent - the user runs that push themselves.
 
 ## Architecture
 
