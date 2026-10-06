@@ -48,6 +48,8 @@ PGDATABASE=waffle_test
 PGSCHEMA=test          # schema that holds company_profiles
 
 PORT=3000
+HOST=0.0.0.0                              # address to listen on (0.0.0.0 = all interfaces)
+PUBLIC_URL=http://<host-or-ip>:3000      # site address; the frontend JavaScript calls the API here
 
 # Required by SEC EDGAR (CUSIP lookup): a real contact email for the User-Agent header
 SEC_EDGAR_CONTACT=your-email@example.com

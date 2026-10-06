@@ -5,10 +5,24 @@ const cors = require('cors');
 const stocksRouter = require('./routes/stocks');
 const monitorRouter = require('./routes/monitor');
 
+const PORT = process.env.PORT || 3000;
+// HOST: the address to listen on (0.0.0.0 = every interface). PUBLIC_URL: the site's address as
+// browsers reach it, e.g. http://172.18.10.196:3000 - handed to the frontend's JavaScript via
+// /config.js as its API base. Unset = relative /api, which works from any address.
+const HOST = process.env.HOST || '0.0.0.0';
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Before express.static and the /<symbol> catch-all below, which would otherwise answer it.
+app.get('/config.js', (req, res) => {
+  res.type('application/javascript').set('Cache-Control', 'no-store');
+  res.send(`window.APP_CONFIG = ${JSON.stringify({ publicUrl: PUBLIC_URL, apiBase: `${PUBLIC_URL}/api` })};\n`);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/stocks', stocksRouter);
@@ -26,8 +40,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ errors: ['internal server error'] });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Stock symbol manager running at http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Stock symbol manager listening on ${HOST}:${PORT}${PUBLIC_URL ? ` - ${PUBLIC_URL}` : ` - http://localhost:${PORT}`}`);
   monitorRouter.scheduleDaily();
 });
