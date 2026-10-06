@@ -57,7 +57,7 @@ cp deploy/deploy.conf.example deploy/deploy.conf
 | `APP_USER` | 執行服務的系統帳號 | `stockapp` |
 | `SERVICE_NAME` | systemd 服務名稱 | `stock-app` |
 | `NODE_VERSION` | 要安裝的 Node 主版本 | `22` |
-| `APP_TZ` | 服務的時區；`.env` 的 `MONITOR_DAILY_AT` 以此時區計算 | `Asia/Taipei` |
+| `APP_TZ` | 服務的時區；`.env` 的 `MONITOR_DAILY_AT` 以此時區計算 | `America/New_York` |
 | `KEEP_RELEASES` | 伺服器上保留的版本數 | `5` |
 
 ### 3.2 準備伺服器用的 `.env`
@@ -71,7 +71,7 @@ cp .env server.env      # server.env 只放本機，不要 commit
 修改 `server.env`：
 - `PUBLIC_URL`：改成瀏覽器連到伺服器的網址，例如 `http://<伺服器IP>:3000`；或直接刪掉這行（前端改用相對路徑 `/api`，任何位址都能用，建議）。
 - `PORT`、`HOST`：一般維持 `3000`、`0.0.0.0`。
-- `MONITOR_DAILY_AT=03:00`：每天自動偵測並**寫入**資料庫。注意：如果本機（WSL）的伺服器也同時在跑並設定了這一行，兩邊會在同一時間對同一張表各跑一次 — 請只在其中一邊保留。
+- `MONITOR_DAILY_AT=03:00`：每天自動偵測並**寫入**資料庫。時間以紐約時間（`APP_TZ`）計算：紐約 03:00 等於台灣時間夏令期間 15:00、冬令期間 16:00。注意：如果本機（WSL）的伺服器也同時在跑並設定了這一行，兩邊會在同一時間對同一張表各跑一次 — 請只在其中一邊保留。
 - 資料庫連線（`PG*`）、`SEC_EDGAR_CONTACT` 照舊。
 
 ### 3.3 執行 setup（一次性）

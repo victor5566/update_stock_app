@@ -19,7 +19,7 @@ APP_DIR="${APP_DIR:-/opt/stock-app}"
 APP_USER="${APP_USER:-stockapp}"
 SERVICE_NAME="${SERVICE_NAME:-stock-app}"
 NODE_VERSION="${NODE_VERSION:-22}"
-APP_TZ="${APP_TZ:-Asia/Taipei}"
+APP_TZ="${APP_TZ:-America/New_York}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 
 SSH_OPTS=(-p "$DEPLOY_SSH_PORT" -o ServerAliveInterval=30)

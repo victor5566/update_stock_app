@@ -16,7 +16,7 @@ SERVICE_NAME=stock-app
 
 # Node major version installed by setup-server.sh (via `n`) when the server has none >= 22.8.0
 NODE_VERSION=22
-# Time zone for the service - MONITOR_DAILY_AT in .env is in this time zone
-APP_TZ=Asia/Taipei
+# Time zone for the service (New York; follows daylight saving) - MONITOR_DAILY_AT in .env is in this time zone
+APP_TZ=America/New_York
 # Releases kept on the server for rollback.sh
 KEEP_RELEASES=5

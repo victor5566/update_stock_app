@@ -60,7 +60,7 @@ Edit `deploy/deploy.conf`. It is gitignored, so it is never committed.
 | `APP_USER` | System user the service runs as | `stockapp` |
 | `SERVICE_NAME` | systemd service name | `stock-app` |
 | `NODE_VERSION` | Node major version to install | `22` |
-| `APP_TZ` | The service's time zone. `MONITOR_DAILY_AT` in `.env` uses this zone. | `Asia/Taipei` |
+| `APP_TZ` | The service's time zone. `MONITOR_DAILY_AT` in `.env` uses this zone. | `America/New_York` |
 | `KEEP_RELEASES` | Number of releases kept on the server | `5` |
 
 ### 3.2 Prepare the server's `.env`
@@ -74,7 +74,7 @@ cp .env server.env      # keep server.env on your machine; don't commit it
 Edit `server.env`:
 - `PUBLIC_URL`: set it to the address browsers use to reach the server, e.g. `http://<server-ip>:3000`. Or delete the line (recommended): the frontend then uses the relative path `/api`, which works from any address.
 - `PORT`, `HOST`: normally leave these at `3000` and `0.0.0.0`.
-- `MONITOR_DAILY_AT=03:00`: runs the stock check every day and **writes the results to the database**. If your local (WSL) server is also running with this line, both servers will run the check on the same table at the same time. Keep the line on only one of them.
+- `MONITOR_DAILY_AT=03:00`: runs the stock check every day and **writes the results to the database**. The time is in New York time (`APP_TZ`): 03:00 New York is 15:00 Taipei time in summer (daylight saving) and 16:00 in winter. If your local (WSL) server is also running with this line, both servers will run the check on the same table at the same time. Keep the line on only one of them.
 - Keep the database settings (`PG*`) and `SEC_EDGAR_CONTACT` as they are.
 
 ### 3.3 Run setup (once)
