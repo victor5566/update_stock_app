@@ -72,7 +72,7 @@ Open <http://localhost:3000>. If `localhost` doesn't reach WSL from Windows, use
 
 ### 1.6 Deploy to a remote Linux server
 
-See [docs/DEPLOY.en.md](docs/DEPLOY.en.md) (中文：[docs/DEPLOY.zh-TW.md](docs/DEPLOY.zh-TW.md)): run `deploy/setup-server.sh` once, then `deploy/deploy.sh` for each release, and `deploy/rollback.sh` to go back.
+See [docs/Deployment_Guide_en.docx](docs/Deployment_Guide_en.docx) (中文：[docs/Deployment_Guide_zh-TW.docx](docs/Deployment_Guide_zh-TW.docx)): run `deploy/setup-server.sh` once, then `deploy/deploy.sh` for each release, and `deploy/rollback.sh` to go back.
 
 ---
 
