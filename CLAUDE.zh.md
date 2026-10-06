@@ -101,4 +101,4 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `audit-stocks.js [--out 路徑.csv]`——**唯讀**交叉比對未下市的 NASDAQ/NYSE/AMEX/OTC 資料（其他市場略過——來源不認得它們）與 NASDAQ Trader 清單、SEC 的 `company_tickers.json`、Yahoo，輸出 `exports/audit-report.csv`（不進 git）供人工檢查：代號變更、下市、名稱被截斷、名稱不符（只有兩個來源一致反對我們時才報）。依結果用 `applyStockUpdate` 修改；下市請設 `isdelisted = true`，絕不刪除。
 - `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與 `GET /api/stocks/export.csv` 共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
 
-**前端**：目前沒有。舊前端（先是原生 JS，後來是用 UMD 載入的 React）已依使用者要求在 2026-10-06 刪除，並從 git 歷史清除；下一版要用 **React + Tailwind CSS** 從頭建立。清除前的完整歷史已另外備份成 repo 外的 git bundle（要使用前先問使用者）。建立新前端時，以上方的 API 為準——`routes/` 不依賴任何特定介面。
+**前端**：目前沒有。舊前端（先是原生 JS，後來是用 UMD 載入的 React）已依使用者要求在 2026-10-06 刪除，並從 git 歷史清除；下一版要用 **React + Tailwind CSS** 從頭建立。舊前端沒有保留任何備份。建立新前端時，以上方的 API 為準——`routes/` 不依賴任何特定介面。
