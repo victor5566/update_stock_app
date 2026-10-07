@@ -1,10 +1,11 @@
-// Add / edit tab. editingStock: the row whose Edit button was clicked in the list (null = add).
+// Add Stock tab - adding only (per the user, no edit mode here; existing stocks are changed in
+// the "Update data" tab).
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { API, autoFillProblems, retryNote } from '../lib/stocks';
 import { Alert, Button, Card, Field, Input, StockLink } from './ui';
 
-export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
+export default function StockFormPanel({ onSaved }) {
   const t = useT();
   const [symbol, setSymbol] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -18,17 +19,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
   const autoFilled = useRef({ company_name: '', exchange: '' });
   // Latest values for async callbacks (a lookup may finish after the user typed on).
   const latest = useRef({});
-  latest.current = { symbol, companyName, market, editingStock };
-
-  useEffect(() => {
-    if (!editingStock) return;
-    setSymbol(editingStock.stock_symbol);
-    setCompanyName(editingStock.company_name);
-    setMarket(editingStock.exchange || '');
-    setError(null);
-    setHint(null);
-    symbolInputRef.current.focus();
-  }, [editingStock]);
+  latest.current = { symbol, companyName, market };
 
   function resetForm() {
     setSymbol('');
@@ -37,13 +28,11 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
     setError(null);
     setHint(null);
     autoFilled.current = { company_name: '', exchange: '' };
-    onExitEdit();
   }
 
-  // Add mode only: once a symbol is committed, warn right away if it's a duplicate, otherwise
-  // pre-fill company name / market (NASDAQ Trader's listing, then Yahoo).
+  // Once a symbol is committed, warn right away if it's a duplicate, otherwise pre-fill company
+  // name / market (NASDAQ Trader's listing, then Yahoo).
   async function lookupSymbolForAdd() {
-    if (latest.current.editingStock) return;
     const sym = latest.current.symbol.trim().toUpperCase();
     setError(null);
     setHint(null);
@@ -61,7 +50,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
       // treated the same as not found
     }
     const now = latest.current;
-    if (now.editingStock || now.symbol.trim().toUpperCase() !== sym) return;
+    if (now.symbol.trim().toUpperCase() !== sym) return;
 
     if (existingSymbol) {
       setHint(null);
@@ -94,21 +83,16 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
-    setHint(null);
     const payload = { stock_symbol: symbol.trim(), company_name: companyName.trim(), exchange: market.trim() };
-    const isEdit = Boolean(editingStock);
     const upperSymbol = payload.stock_symbol.toUpperCase();
-    // The server uppercases a submitted symbol, so only send it when it actually changed -
-    // otherwise saving any edit of a mixed-case row ("ACIC_old") would rename it.
-    if (isEdit && upperSymbol === editingStock.stock_symbol.toUpperCase()) delete payload.stock_symbol;
 
     // An add waits for the company-info / CUSIP lookup (a few seconds).
-    if (!isEdit) setHint({ message: t('addingStock')(upperSymbol), tone: 'info' });
+    setHint({ message: t('addingStock')(upperSymbol), tone: 'info' });
     setSubmitting(true);
     let res;
     try {
-      res = await fetch(isEdit ? `${API}/stocks/${editingStock.id}` : `${API}/stocks`, {
-        method: isEdit ? 'PUT' : 'POST',
+      res = await fetch(`${API}/stocks`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -122,17 +106,18 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setHint(null);
-      // existing_symbol: the spelling actually held ("BRK.B" when "BRK-B" was typed)
+      // symbol_name_taken: another (usually delisted) row already has this symbol + name - the
+      // table's unique index. Otherwise existing_symbol is the spelling actually held ("BRK.B"
+      // when "BRK-B" was typed).
       if (data.code === 'symbol_name_taken') setError({ text: t('symbolNameTaken')(data.existing_symbol, data.existing_delisted), linkSymbol: data.existing_symbol, linkId: data.existing_id });
-      else if (res.status === 409) setError({ text: t(isEdit ? 'symbolInUse' : 'duplicateSymbol')(data.existing_symbol || upperSymbol), linkSymbol: data.existing_symbol || upperSymbol });
+      else if (res.status === 409) setError({ text: t('duplicateSymbol')(data.existing_symbol || upperSymbol), linkSymbol: data.existing_symbol || upperSymbol });
       else setError({ text: data.errors?.join(', ') || t('operationFailed') });
       return;
     }
 
     resetForm();
     const sym = data.stock_symbol;
-    if (isEdit) setHint({ message: t('updatedOk')(sym), stock: data, tone: 'success' });
-    else if (!data.autofill) setHint({ message: t('addedStock')(sym), stock: data, tone: 'success' });
+    if (!data.autofill) setHint({ message: t('addedStock')(sym), stock: data, tone: 'success' });
     else if (data.autofill.pending) setHint({ message: t('addedPending')(sym), stock: data, tone: 'warn' });
     else {
       const problems = autoFillProblems(data.autofill, t);
@@ -141,12 +126,12 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
         ? { message: t('addedSomeMissing')(sym), stock: data, lines: note ? [...problems, note] : problems, tone: 'warn' }
         : { message: t('addedAllFound')(sym), stock: data, tone: 'success' });
     }
-    onSaved({ isEdit });
+    onSaved();
   }
 
   return (
-    <Card title={editingStock ? t('editTitle')(editingStock.stock_symbol) : t('addTitle')}>
-      {!editingStock && <p className="mb-4 text-sm text-slate-800 dark:text-slate-100">{t('addHelp')}</p>}
+    <Card title={t('addTitle')}>
+      <p className="mb-4 text-sm text-slate-800 dark:text-slate-100">{t('addHelp')}</p>
       <form id="stock-form" onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
         <Field htmlFor="stock-symbol" label={t('labelSymbol')}>
           <Input id="stock-symbol" className="uppercase" placeholder="AAPL" required ref={symbolInputRef} value={symbol} onChange={(e) => setSymbol(e.target.value)} />
@@ -158,8 +143,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
           <Input id="trading-market" list="exchange-datalist" placeholder="NASDAQ" autoComplete="off" required value={market} onChange={(e) => setMarket(e.target.value)} />
         </Field>
         <div className="flex gap-2 sm:col-span-3">
-          <Button type="submit" id="submit-btn" variant="primary" disabled={submitting}>{editingStock ? t('saveBtn') : t('addBtn')}</Button>
-          {editingStock && <Button id="cancel-btn" onClick={resetForm}>{t('cancel')}</Button>}
+          <Button type="submit" id="submit-btn" variant="primary" disabled={submitting}>{t('addBtn')}</Button>
         </div>
         {error && (
           <Alert id="form-error" tone="error" className="sm:col-span-3">
