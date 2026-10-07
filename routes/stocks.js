@@ -405,6 +405,31 @@ router.get('/:id(\\d+)', async (req, res, next) => {
   }
 });
 
+// The table's unique index idx_unq_company_profiles_stock_symbol is on (stock_symbol, company_name),
+// so a write fails with 23505 when another row - typically the company's old delisted row (ADCT
+// 8837 "ADC Therapeutics SA" next to the live 124802 "Adc Therapeutics S.A.") - already has that
+// symbol *and* name. Returns the 409 body naming that row, or null for any other conflict.
+async function symbolNameTaken(err, symbol, name, excludeId = null) {
+  if (err.code !== '23505' || err.constraint !== 'idx_unq_company_profiles_stock_symbol') return null;
+  // (no `$3::type IS NULL` trick: explicit casts fail for this role - see CLAUDE.md)
+  const params = [symbol, name];
+  if (excludeId != null) params.push(excludeId);
+  const { rows } = await pool.query(
+    `SELECT ${ID} AS id, stock_symbol, coalesce(isdelisted, false) AS isdelisted FROM ${TABLE}
+     WHERE stock_symbol = $1 AND company_name = $2${excludeId != null ? ` AND ${ID} <> $3` : ''}
+     LIMIT 1`,
+    params
+  ).catch(() => ({ rows: [] }));
+  const row = rows[0];
+  return {
+    errors: ['another row already has this stock_symbol and company_name'],
+    code: 'symbol_name_taken',
+    existing_symbol: row ? row.stock_symbol : symbol,
+    existing_id: row ? row.id : null,
+    existing_delisted: row ? row.isdelisted : null,
+  };
+}
+
 // POST /api/stocks
 router.post('/', async (req, res, next) => {
   try {
@@ -452,7 +477,9 @@ router.post('/', async (req, res, next) => {
     res.status(201).json({ ...(rows[0] || inserted), autofill });
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: req.body.stock_symbol.trim().toUpperCase() });
+      const symbol = req.body.stock_symbol.trim().toUpperCase();
+      const taken = await symbolNameTaken(err, symbol, req.body.company_name.trim());
+      return res.status(409).json(taken || { errors: ['stock_symbol already exists'], existing_symbol: symbol });
     }
     next(err);
   }
@@ -494,7 +521,11 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     res.json(updated);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ errors: ['stock_symbol already exists'], existing_symbol: fields.stock_symbol });
+      // The symbol / name the row would have had: the new value, else the stored one.
+      const { rows } = await pool.query(`SELECT stock_symbol, company_name FROM ${TABLE} WHERE ${ID} = $1`, [id]).catch(() => ({ rows: [] }));
+      const current = rows[0] || {};
+      const taken = await symbolNameTaken(err, fields.stock_symbol ?? current.stock_symbol, fields.company_name ?? current.company_name, id);
+      return res.status(409).json(taken || { errors: ['stock_symbol already exists'], existing_symbol: fields.stock_symbol || current.stock_symbol });
     }
     next(err);
   }

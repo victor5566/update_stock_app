@@ -7,7 +7,17 @@
     <meta name="theme-color" content="#2563eb" />
     <meta name="description" content="Stock symbol maintenance for the shared company_profiles table" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>股票代碼維護系統</title>
+    <title>Stock Symbol Maintenance</title>
+    <script>
+      // Before React loads: title and <html lang> in the remembered language (src/i18n.js keeps
+      // them in sync afterwards), so an English user never sees Chinese, even while loading.
+      (function () {
+        var lang = 'zh';
+        try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch (e) {}
+        if (lang === 'zh') document.title = '股票代碼維護系統';
+        document.documentElement.lang = lang === 'zh' ? 'zh-Hant' : 'en';
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

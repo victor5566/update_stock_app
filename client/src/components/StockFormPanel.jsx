@@ -9,7 +9,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
   const [symbol, setSymbol] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [market, setMarket] = useState('');
-  const [error, setError] = useState(null); // { text, linkSymbol? }
+  const [error, setError] = useState(null); // { text, linkSymbol?, linkId? }
   const [hint, setHint] = useState(null); // { message, stock?, lines?, tone }
   const [submitting, setSubmitting] = useState(false);
   const symbolInputRef = useRef(null);
@@ -123,7 +123,8 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
     if (!res.ok) {
       setHint(null);
       // existing_symbol: the spelling actually held ("BRK.B" when "BRK-B" was typed)
-      if (res.status === 409) setError({ text: t('duplicateSymbol')(data.existing_symbol || upperSymbol), linkSymbol: data.existing_symbol || upperSymbol });
+      if (data.code === 'symbol_name_taken') setError({ text: t('symbolNameTaken')(data.existing_symbol, data.existing_delisted), linkSymbol: data.existing_symbol, linkId: data.existing_id });
+      else if (res.status === 409) setError({ text: t(isEdit ? 'symbolInUse' : 'duplicateSymbol')(data.existing_symbol || upperSymbol), linkSymbol: data.existing_symbol || upperSymbol });
       else setError({ text: data.errors?.join(', ') || t('operationFailed') });
       return;
     }
@@ -162,7 +163,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
         </div>
         {error && (
           <Alert id="form-error" tone="error" className="sm:col-span-3">
-            {error.text}{error.linkSymbol && <StockLink symbol={error.linkSymbol} />}
+            {error.text}{error.linkSymbol && <StockLink symbol={error.linkSymbol} id={error.linkId} />}
           </Alert>
         )}
         {hint && (
