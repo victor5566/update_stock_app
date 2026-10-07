@@ -135,7 +135,9 @@ export default function HomePage() {
   // Panels stay mounted (just hidden) so a half-filled form or a running monitor poll survives
   // switching tabs.
   const panel = (id, children) => (
-    <div id={`panel-${id}`} role="tabpanel" hidden={tab !== id} className="grid gap-6">{children}</div>
+    <div id={`panel-${id}`} role="tabpanel" hidden={tab !== id}
+      // `grid` would override the hidden attribute's display:none, so a hidden panel gets `hidden` instead.
+      className={tab === id ? 'grid gap-6' : 'hidden'}>{children}</div>
   );
 
   return (
