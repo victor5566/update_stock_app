@@ -3,4 +3,4 @@ node_modules/
 exports/
 ~$*
 deploy/deploy.conf
-public/build/
+client/build/

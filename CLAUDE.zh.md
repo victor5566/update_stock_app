@@ -4,7 +4,7 @@
 
 ## 專案簡介
 
-一個股票代碼維護系統：後端是純 Node.js/Express（JSON API），前端是 **React + Tailwind CSS**（React 18 UMD，不用打包工具；Tailwind 由 `npm run build` 編譯），資料存在 PostgreSQL。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
+一個股票代碼維護系統：後端是純 Node.js/Express（JSON API），前端是 `client/` 裡的 **React（create-react-app）+ Tailwind CSS**（由 `npm run build` 建置到 `client/build`，再由 Express 提供），資料存在 PostgreSQL。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
 
 **資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle_test` 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql`）。
 
@@ -14,15 +14,16 @@
 npm install
 npm start          # node server.js
 npm run dev         # node --watch server.js
-npm run build       # 編譯 Tailwind CSS（public/build/app.css）
-npm run dev:css     # 檔案變更時自動重新編譯 Tailwind CSS
+npm run build       # 在 client/ 執行 npm ci（含 dev 套件），再 react-scripts build -> client/build
+npm run dev:client  # CRA 開發伺服器 :3001（熱更新），/api 轉送到 :3000 的伺服器
+npm test            # 前端的 Jest 測試（react-scripts test，不 watch）
 ```
 
-目前沒有設定測試或 lint 指令。`npm run build` 只編譯 Tailwind CSS（`public/build/app.css`）；每次部署都會執行它（`deploy/remote.sh` 在切換版本前，以及 `company_profiles` repo 的 GitHub Actions `deploy.yml`）。已經沒有另外的部署前檢查腳本——使用者在 2026-10-06 要求移除 `scripts/build.js`（Node 版本／語法／套件／UMD／UTF-16 `.env` 檢查），不要再加回來。壞掉的版本仍會被 `deploy/remote.sh` 的健康檢查擋下（而且 `db.js` 本身在 Node v22.7.0 上會拒絕啟動）。
+除了 CRA 內建的 ESLint（建置／開發時顯示警告），沒有另外的 lint 指令。`npm run build` 會先安裝前端套件（`npm ci --prefix client --include=dev`，因為 `deploy/remote.sh` 用 `--omit=dev` 安裝根目錄，而 Tailwind 是前端的 devDependency），再把 React 應用程式建置到 `client/build`（不進 git）；每次部署都會執行它（`deploy/remote.sh` 在切換版本前，以及 `company_profiles` repo 的 GitHub Actions `deploy.yml`）。已經沒有另外的部署前檢查腳本——使用者在 2026-10-06 要求移除 `scripts/build.js`（Node 版本／語法／套件／UMD／UTF-16 `.env` 檢查），不要再加回來。壞掉的版本仍會被 `deploy/remote.sh` 的健康檢查擋下（而且 `db.js` 本身在 Node v22.7.0 上會拒絕啟動）。
 
 **部署**：`deploy/setup-server.sh`（一次）、`deploy/deploy.sh [ref]`、`deploy/rollback.sh`——systemd 服務，版本放在 `/opt/stock-app`，伺服器有自己的 `shared/.env`，服務時區 `America/New_York`。手冊：`docs/Deployment_Guide_{zh-TW,en}.docx`。`company_profiles` repo 另外用自己的 `.github/workflows/deploy.yml` 部署（LXC 容器內的 PM2，push 到 main/dev/test 時觸發）。
 
-**文件**（`docs/`，只有 Word 檔——使用者要 .docx，不要 Markdown 副本）：`Stock_System_Guide_{zh-TW,en}.docx`（安裝、網頁功能、偵測與 CUSIP 查詢的運作方式、命令列工具、欄位、疑難排解）和 `Deployment_Guide_{zh-TW,en}.docx`（`deploy/` 腳本、在伺服器上手動建置、company_profiles 的 GitHub Actions 流程）。中英文版結構相同。修改到安裝、介面、部署或文件描述的行為時，四份都要更新，並轉成 PDF 等方式檢查排版。最近一次重新產生是 2026-10-06，對應 React + Tailwind 前端。
+**文件**（`docs/`，只有 Word 檔——使用者要 .docx，不要 Markdown 副本）：`Stock_System_Guide_{zh-TW,en}.docx`（安裝、網頁功能、偵測與 CUSIP 查詢的運作方式、命令列工具、欄位、疑難排解）和 `Deployment_Guide_{zh-TW,en}.docx`（`deploy/` 腳本、在伺服器上手動建置、company_profiles 的 GitHub Actions 流程）。中英文版結構相同。修改到安裝、介面、部署或文件描述的行為時，四份都要更新，並轉成 PDF 等方式檢查排版。最近一次重新產生是 2026-10-07，對應 create-react-app + Tailwind 前端。
 
 整個專案在 WSL（Linux）中開發與執行，雖然專案資料夾實際放在 Windows 檔案系統（從 WSL 看是 `/mnt/c/Users/...`）。所有 `node`／`npm` 指令都要在 WSL shell 裡執行，不要用 PowerShell。從 Windows 連 `localhost:3000` 依賴 WSL 的 localhost 轉發，這個轉發曾經壞掉（沒有 `wslrelay` 在跑）；用 WSL 的 IP（`wsl hostname -I`）仍然可以連。
 
@@ -104,12 +105,15 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `audit-stocks.js [--out 路徑.csv]`——**唯讀**交叉比對未下市的 NASDAQ/NYSE/AMEX/OTC 資料（其他市場略過——來源不認得它們）與 NASDAQ Trader 清單、SEC 的 `company_tickers.json`、Yahoo，輸出 `exports/audit-report.csv`（不進 git）供人工檢查：代號變更、下市、名稱被截斷、名稱不符（只有兩個來源一致反對我們時才報）。依結果用 `applyStockUpdate` 修改；下市請設 `isdelisted = true`，絕不刪除。
 - `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與 `GET /api/stocks/export.csv` 共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
 
-**前端**（`public/`）——**React + Tailwind CSS**，在 2026-10-06 舊前端（先是原生 JS，後來是 UMD 載入的 React）依使用者要求刪除並從 git 歷史清除（沒有保留備份）之後從頭建立。依使用者要求只用 React：**不用 Vite、router、JSX**。React 18 的 UMD 檔案來自 `node_modules`，由 `server.js` 在 `/vendor/react/`、`/vendor/react-dom/` 提供（不用 CDN）——React 19 已不提供 UMD，請維持 18 版。元件用 `const h = React.createElement` 撰寫。Tailwind CSS v4 由官方 CLI（`@tailwindcss/cli`）在 `npm run build` 的前半段，從 `styles/tailwind.css` 編譯成 `public/build/app.css`（不進 git）；它掃描 `public/*.js`／`*.html` 找 class 名稱，所以 **class 名稱必須寫成完整的字串**（不要 `'bg-' + color`），否則不會被產生。改了 class 後要重跑 `npm run build`（或讓 `npm run dev:css` 持續執行）。Tailwind、React、react-dom 放在 `dependencies` 而不是 devDependencies，因為兩種部署都在伺服器上建置（`deploy/remote.sh` 用 `--omit=dev` 安裝）。Tailwind CLI 用到平台專屬的原生程式，而 `node_modules` 是 Windows 和 WSL 共用的——npm 請在 WSL 執行。檔案：
-- `shared.js`（兩頁都先載入）：`TRANSLATIONS`（zh/en，兩頁的字串）、`LangContext`／`useT()`／`useLang()`（語言存在 `localStorage`，以 try/catch 包住）、`stockHref()`、`autoFillProblems()`／`retryNote()`，以及 Tailwind 介面元件（`Card`、`Button` 各種樣式、`Input`、`Select`、`Field`、`Alert` 各種色調、`Badge`、`Table`／`TH`／`TD`、`Pagination`、`PageHeader`、`LangSelect`）。請重用這些元件，不要在各處另寫樣式，兩頁才會一致；深色模式用 Tailwind 的 `dark:`（跟隨作業系統）。
-- `index.html` + `app.js`：一個頁面分成數個分頁（`#list`、`#form`、`#edit`、`#monitor`，記在網址的 hash）。各分頁始終掛載、只是隱藏，所以填到一半的表單或執行中的偵測輪詢在切換分頁後仍保留。
+**前端**（`client/`）——**create-react-app + Tailwind CSS**。2026-10-07 使用者要求整個前端打掉，用 `npx create-react-app` 重做（「讓之後網站可以擴充維護」），功能不變；之前的前端（原生 JS、不用 JSX 的 UMD React）都已移除。`client/` 是獨立的 npm 套件（`react-scripts` 5、React 19、`react-router-dom` 7、Tailwind CSS **v3** 為 devDependency——CRA 透過 PostCSS 自動讀取 `tailwind.config.js`；Tailwind v4 與 CRA 不相容，請維持 v3）。Tailwind 掃描 `src/**/*.{js,jsx}`，所以 **class 名稱必須寫成完整的字串**（不要 `'bg-' + color`）。Express 提供 `client/build`，所有非 `/api` 路徑都回傳其 `index.html`（尚未建置時回 503 文字）；未知的 `/api/...` 回 JSON 404，`GET /api/health` 是部署用的健康檢查。開發時同時執行伺服器（`npm run dev`）和 `npm run dev:client`（port 3001，CRA 的 `"proxy": "http://localhost:3000"` 轉送 `/api`）。npm 請在 WSL 執行（`node_modules` 與 Windows 共用）。結構（`client/src/`）：
+- `index.js`：`BrowserRouter`，`/` -> `pages/HomePage.jsx`，`/:symbol` -> `pages/StockPage.jsx`。`index.css`：Tailwind 指令與 body 基本樣式。
+- `translations.js`（`TRANSLATIONS`，zh/en，兩頁的字串）、`i18n.js`（`LangContext`／`useT()`／`useLang(titleKey)`；語言存在 `localStorage`，以 try/catch 包住）、`lib/stocks.js`（`API = '/api'`、`PAGE_SIZE`、`cx`、`stockHref()`、`autoFillProblems()`／`retryNote()`）、`lib/monitorCategories.js`（偵測結果分類，見下）。
+- `components/ui.jsx`：Tailwind 介面元件（`Card`、`Button` 各種樣式、`Input`、`Select`、`Field`、`Alert` 各種色調、`Badge`、`Chip`、`StockLink`、`Table`／`TH`／`TD`、`Pagination`、`PageHeader`、`LangSelect`）。請重用這些元件，不要在各處另寫樣式，兩頁才會一致；深色模式用 Tailwind 的 `dark:`（跟隨作業系統）。面板：`StockListPanel`、`StockFormPanel`、`LookupEditForm`、`MonitorPanel`。
+- 測試（react-scripts 的 Jest，`npm test`）：`translations.test.js`（中英文 key 一致）、`lib/monitorCategories.test.js`（說明字串的分類與翻譯）。
+- `HomePage`：一個頁面分成數個分頁（`#list`、`#form`、`#edit`、`#monitor`，記在網址的 hash）。各分頁始終掛載、只是隱藏，所以填到一半的表單或執行中的偵測輪詢在切換分頁後仍保留。
   - **股票列表**：在伺服器端分頁（`fetchStocks({ keepPage, page, ...overrides })`，`PAGE_SIZE = 15`，用請求計數丟棄過期的回應）；搜尋（300 ms debounce）和市場篩選會回到第 1 頁；市場篩選是 `<select>`，不是 datalist 輸入框（datalist 裡是「OTC」時只會建議「OTC」——先前的回饋）；匯出 CSV 用相同篩選開啟 `GET /api/stocks/export.csv`。按「編輯」會切到表單分頁的編輯模式。
   - **新增／編輯表單**：代號輸入完成時（直接監聽 DOM 的 `change` 事件——React 的 `onChange` 每個按鍵都會觸發）呼叫 `yahoo-lookup`：409 就顯示重複警告並連到實際存放的寫法，否則預填名稱／市場，只覆蓋空白或仍是上次預填值的欄位。編輯模式只在代號真的改變時才送 `stock_symbol`（儲存大小寫混合的資料時才不會被改名）。新增後把 `autofill` 報告轉成原因清單和重試時間。
   - **修改資料**：三個「先查詢再修改」表單是同一個 `LookupEditForm` 元件，由 `LOOKUP_FORMS` 設定驅動（id、資訊欄位、新值欄位、相同值檢查、PUT 內容）——新增表單時在那裡加一筆設定。代號輸入框用 `#stock-datalist` 自動完成（每次輸入時從 `GET /suggest` 取得）；市場欄位的建議來自 `#exchange-datalist`。代號輸入框用 `uppercase` class（只影響顯示），不要改動輸入值。
-  - **股票偵測**：預覽／偵測並更新（先確認）／中止（只在執行中顯示）；每 3 秒輪詢 `GET /api/monitor/status`，顯示進度條，載入 `GET /api/monitor/report` 的結果（有變更的排前面），每頁 15 筆；寫入型的執行結束後會重新整理列表和市場選項。結果可依分類篩選（`app.js` 的 `MONITOR_CATEGORIES`：自動變更——標為下市／恢復上市／名稱／市場／Category／幣別；需要注意——代號已被其他公司使用／代號重複／名稱不一致／其他說明；寫入失敗），以帶筆數的按鈕顯示。說明文字是 `lib/stockMonitor.js` 的 `planRow()` 產生的英文字串，`app.js` 的 `NOTE_PATTERNS` 比對它們來分類並翻譯（`shared.js` 的 `monitorNotes`）——**修改 `planRow()` 的說明字串時，也要同步修改 `NOTE_PATTERNS`**，否則會落到「其他說明」且不會翻譯。
-- `stock.html` + `stock.js`：個股詳細頁。`server.js` 對任何單一段路徑（`/^\/[^/]{1,150}$/`，在 `express.static` 和 `/api/*` 之後）回傳 `stock.html`；列表連結是 `/<小寫代號>?id=<company_profile_id>`，因為代號不唯一。頁面會顯示 `autofill` 說明，並在 `next_retry_at` 之後重新讀取；新增不到 2 分鐘且仍缺 `sector`／`cusips` 的股票，每 3 秒重新讀取（最多 10 次）。
-- 測試：沒有測試套件；修改是用 headless Chrome（puppeteer-core）腳本對執行中的伺服器驗證，只做讀取（不實際送出成功的新增／修改，因為資料表是共用的）。
+  - **股票偵測**：預覽／偵測並更新（先確認）／中止（只在執行中顯示）；每 3 秒輪詢 `GET /api/monitor/status`，顯示進度條，載入 `GET /api/monitor/report` 的結果（有變更的排前面），每頁 15 筆；寫入型的執行結束後會重新整理列表和市場選項。結果可依分類篩選（`lib/monitorCategories.js` 的 `MONITOR_CATEGORIES`：自動變更——標為下市／恢復上市／名稱／市場／Category／幣別；需要注意——代號已被其他公司使用／代號重複／名稱不一致／其他說明；寫入失敗），以帶筆數的按鈕顯示。說明文字是 `lib/stockMonitor.js` 的 `planRow()` 產生的英文字串，`lib/monitorCategories.js` 的 `NOTE_PATTERNS` 比對它們來分類並翻譯（`translations.js` 的 `monitorNotes`）——**修改 `planRow()` 的說明字串時，也要同步修改 `NOTE_PATTERNS` 和它的測試**，否則會落到「其他說明」且不會翻譯。
+- `StockPage`：個股詳細頁（路由 `/:symbol`；有 `?id=` 就讀 `GET /api/stocks/:id`，否則用 `by-symbol`）。列表連結是 `/<小寫代號>?id=<company_profile_id>`，因為代號不唯一。頁面會顯示 `autofill` 說明，並在 `next_retry_at` 之後重新讀取；新增不到 2 分鐘且仍缺 `sector`／`cusips` 的股票，每 3 秒重新讀取（最多 10 次）。
+- 除了 Jest 測試，介面修改也用 headless Chrome（puppeteer-core）腳本對執行中的伺服器驗證，只做讀取（不實際送出成功的新增／修改，因為資料表是共用的；偵測結果以攔截請求模擬）。
