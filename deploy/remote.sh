@@ -1,7 +1,7 @@
 # Runs ON THE SERVER, sent over ssh by setup-server.sh / deploy.sh / rollback.sh with the settings
 # (APP_DIR, APP_USER, SERVICE_NAME, NODE_VERSION, APP_TZ, KEEP_RELEASES, DEPLOY_USER) in the environment.
 #   remote.sh setup [env-file]   one-time provisioning, as root
-#   remote.sh activate <release> npm install, npm run build (Tailwind CSS), switch current, restart,
+#   remote.sh activate <release> npm install, npm run build (React app), switch current, restart,
 #                                health check (rolls back on failure)
 #   remote.sh rollback [release] switch current to the given / previous release
 #   remote.sh list               list releases
@@ -142,7 +142,7 @@ cmd_activate() {
   ln -sfn "$SHARED/.env" "$dir/.env"
   log "npm install (production dependencies) with Node $(node -v)"
   (cd "$dir" && npm install --omit=dev --no-audit --no-fund --update-notifier=false --loglevel=error)
-  log "npm run build"
+  log "npm run build (client packages + React build)"
   (cd "$dir" && npm run build --silent --update-notifier=false)
 
   [ -L "$CURRENT" ] && prev="$(readlink -f "$CURRENT")"

@@ -10,7 +10,7 @@ The data lives in an existing shared table, **`test.company_profiles`**, in the 
 Stack:
 
 - **Backend:** Node.js + Express
-- **Frontend:** React 18 + Tailwind CSS v4. No bundler and no JSX: React is served from `node_modules`, and `npm run build` compiles the Tailwind CSS.
+- **Frontend:** React (created with `npx create-react-app`, in `client/`) + Tailwind CSS v3 + React Router. `npm run build` builds it into `client/build`, which Express serves.
 - **External data sources:** Yahoo Finance (`yahoo-finance2`), NASDAQ Trader symbol directory, SEC EDGAR, quantumonline.com
 
 ---
@@ -63,15 +63,16 @@ There is nothing to create: the app only uses `company_profiles`. The login role
 ### 1.5 Run
 
 ```bash
-npm run build    # compile the Tailwind CSS (public/build/app.css)
-npm start        # production: node server.js
-npm run dev      # development: restarts automatically on file changes
-npm run dev:css  # development: recompiles the CSS on every change (run next to npm run dev)
+npm run build       # install the client's packages and build the React app (client/build)
+npm start           # production: node server.js
+npm run dev         # development: the API server, restarts automatically on file changes
+npm run dev:client  # development: the React dev server on port 3001 with hot reload (run next to npm run dev)
+npm test            # the React app's tests (Jest)
 ```
 
-Run `npm run build` at least once before `npm start`: the pages need the compiled CSS. Run npm in WSL, not PowerShell (Tailwind's CLI uses platform-specific binaries, and `node_modules` is shared).
+Run `npm run build` at least once before `npm start`, and again after changing anything in `client/`: the server serves the built files. Run npm in WSL, not PowerShell (`node_modules` is shared between Windows and WSL).
 
-Open <http://localhost:3000>. The API is under `/api`, for example <http://localhost:3000/api/health>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
+Open <http://localhost:3000> (during development with `npm run dev:client`: <http://localhost:3001>, which forwards `/api` to port 3000). The API is under `/api`, for example <http://localhost:3000/api/health>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
 
 ### 1.6 Deploy to a remote Linux server
 
@@ -182,6 +183,8 @@ lib/stockTable.js    Table name, column mapping, row-preference order for compan
 routes/stocks.js     The API
 lib/                 Shared logic: Yahoo client, CUSIP lookup, update, detail fill, CSV
 scripts/             Command-line tools
-public/              Frontend: shared.js (translations, Tailwind UI components), index.html + app.js, stock.html + stock.js
-styles/tailwind.css  Tailwind CSS input; npm run build compiles it to public/build/app.css (gitignored)
+client/              Frontend (create-react-app): its own package.json, tailwind.config.js, public/index.html
+client/src/          index.js (routes), pages/ (HomePage, StockPage), components/ (ui.jsx + panels),
+                     lib/ (API helpers, monitor report categories), translations.js, i18n.js, *.test.js
+client/build/        npm run build output, served by server.js (gitignored)
 ```

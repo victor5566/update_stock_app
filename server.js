@@ -8,7 +8,8 @@ const monitorRouter = require('./routes/monitor');
 const PORT = process.env.PORT || 3000;
 // HOST: the address to listen on (0.0.0.0 = every interface).
 const HOST = process.env.HOST || '0.0.0.0';
-const PUBLIC_DIR = path.join(__dirname, 'public');
+// The React app (client/, create-react-app) is built into client/build by `npm run build`.
+const CLIENT_BUILD = path.join(__dirname, 'client', 'build');
 
 const app = express();
 
@@ -23,17 +24,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/stocks', stocksRouter);
 app.use('/api/monitor', monitorRouter);
 
-// Frontend: React + Tailwind CSS without a bundler. The pages load React's UMD builds, served
-// here straight from node_modules (no CDN); the CSS is public/build/app.css from `npm run build`.
-for (const pkg of ['react', 'react-dom']) {
-  app.use(`/vendor/${pkg}`, express.static(path.join(path.dirname(require.resolve(`${pkg}/package.json`)), 'umd')));
-}
-app.use(express.static(PUBLIC_DIR));
+// An unknown /api path is a 404, not the web page.
+app.use('/api', (req, res) => {
+  res.status(404).json({ errors: ['not found'] });
+});
 
-// Per-stock detail page, e.g. /aapl or /000001.sz - reached only when express.static found no
-// file. The regex (one path segment) keeps it off /api/* and other multi-segment paths.
-app.get(/^\/[^/]{1,150}$/, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'stock.html'));
+// The web UI: the built React app's files, and index.html for every other path, so the app's
+// own routes (/, /<symbol> detail pages) also work on a reload or a direct link.
+app.use(express.static(CLIENT_BUILD));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(CLIENT_BUILD, 'index.html'), (err) => {
+    if (err) res.status(503).type('text').send('The web UI is not built yet - run `npm run build`.');
+  });
 });
 
 app.use((err, req, res, next) => {

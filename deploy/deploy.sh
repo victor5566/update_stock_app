@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys a commit (default HEAD) to the server: uploads it as a new release, installs production
-# dependencies, builds the web UI's CSS (npm run build), switches $APP_DIR/current to it, restarts
+# dependencies, builds the React web UI (npm run build -> client/build), switches $APP_DIR/current to it, restarts
 # the service and checks it answers.
 # If the new release doesn't come up, the previous one is restored.
 #
