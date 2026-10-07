@@ -4,7 +4,7 @@ import { useT } from '../i18n';
 import { API, PAGE_SIZE, cx } from '../lib/stocks';
 import { Badge, Button, Card, Input, Pagination, Select, StockLink, Table, TD } from './ui';
 
-export default function StockListPanel({ stockPage, loading, search, marketFilter, markets, onSearch, onMarketFilter, onPage, onEdit }) {
+export default function StockListPanel({ stockPage, loading, search, marketFilter, markets, onSearch, onMarketFilter, onPage }) {
   const t = useT();
   const { rows, total, page } = stockPage;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -30,7 +30,7 @@ export default function StockListPanel({ stockPage, loading, search, marketFilte
         <Button id="export-csv-btn" onClick={exportCsv}>{t('exportCsvBtn')}</Button>
       </div>
 
-      <Table id="stock-table" head={[t('labelSymbol'), t('labelCompany'), t('labelMarket'), t('labelDelisted'), t('labelUpdated'), t('labelActions')]}>
+      <Table id="stock-table" head={[t('labelSymbol'), t('labelCompany'), t('labelMarket'), t('labelDelisted'), t('labelUpdated')]}>
         {rows.map((stock) => (
           <tr key={stock.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
             <td className={TD}><StockLink symbol={stock.stock_symbol} id={stock.id} /></td>
@@ -38,7 +38,6 @@ export default function StockListPanel({ stockPage, loading, search, marketFilte
             <td className={TD}>{stock.exchange}</td>
             <td className={TD}>{stock.isdelisted ? <Badge tone="red">{t('delisted')}</Badge> : <Badge tone="green">{t('listed')}</Badge>}</td>
             <td className={cx(TD, 'whitespace-nowrap text-xs')}>{stock.updated_at ? new Date(stock.updated_at).toLocaleString(t('locale')) : ''}</td>
-            <td className={TD}><Button size="sm" variant="subtle" className="btn-edit" onClick={() => onEdit(stock)}>{t('editBtn')}</Button></td>
           </tr>
         ))}
       </Table>

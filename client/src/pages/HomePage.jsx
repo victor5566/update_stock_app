@@ -1,4 +1,4 @@
-// Main page: tabs for the stock list, add / edit, the lookup-before-edit forms and the stock
+// Main page: tabs for the stock list, add stock, the lookup-before-edit forms and the stock
 // monitor. The tab is kept in the URL hash (#list, #form, #edit, #monitor).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LangContext, useLang } from '../i18n';
@@ -28,7 +28,6 @@ export default function HomePage() {
   // The list page shown: { rows, total, page, pageSize } from GET /api/stocks.
   const [stockPage, setStockPage] = useState({ rows: [], total: 0, page: 1, pageSize: PAGE_SIZE });
   const [loading, setLoading] = useState(true);
-  const [editingStock, setEditingStock] = useState(null);
 
   // Latest filters/page for fetches started from timers and callbacks.
   const listState = useRef({});
@@ -152,7 +151,7 @@ export default function HomePage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <nav role="tablist" className="mb-6 flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
           {tabButton('list', t('tabList'))}
-          {tabButton('form', editingStock ? t('editTitle')(editingStock.stock_symbol) : t('tabForm'))}
+          {tabButton('form', t('tabForm'))}
           {tabButton('edit', t('tabEdit'))}
           {tabButton('monitor', t('tabMonitor'))}
         </nav>
@@ -166,15 +165,10 @@ export default function HomePage() {
             onSearch={handleSearch}
             onMarketFilter={(value) => { setMarketFilter(value); fetchStocks({ marketFilter: value }); }}
             onPage={(page) => fetchStocks({ page })}
-            onEdit={(stock) => { setEditingStock(stock); showTab('form'); }}
           />
         ))}
         {panel('form', (
-          <StockFormPanel
-            editingStock={editingStock}
-            onExitEdit={() => setEditingStock(null)}
-            onSaved={({ isEdit }) => { fetchStocks({ keepPage: isEdit }); fetchMarkets(); }}
-          />
+          <StockFormPanel onSaved={() => { fetchStocks(); fetchMarkets(); }} />
         ))}
         {panel('edit', (
           <>
