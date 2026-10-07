@@ -6,19 +6,21 @@ export const NOTE_PATTERNS = {
   recycled: /^symbol is trading under another company \((.*)\) - left delisted$/,
   duplicate: /^symbol is trading, but another live row already has it$/,
   nameDiffers: /^name differs: (.*)$/,
+  // the table's unique (stock_symbol, company_name) index: another row already has symbol + new name
+  nameTaken: /^name already used by another row with this symbol \(id (\d+)(, delisted)?\): (.*) - nothing changed$/,
 };
 
 export function noteKind(note) {
   for (const [kind, re] of Object.entries(NOTE_PATTERNS)) {
     const m = note.match(re);
-    if (m) return { kind, arg: m[1] };
+    if (m) return { kind, arg: m[1], args: m.slice(1) };
   }
   return { kind: 'otherNote' };
 }
 
 export function describeNote(note, t) {
-  const { kind, arg } = noteKind(note);
-  return kind === 'otherNote' ? note : t('monitorNotes')[kind](arg);
+  const { kind, args } = noteKind(note);
+  return kind === 'otherNote' ? note : t('monitorNotes')[kind](...args);
 }
 
 const hasChange = (field, to) => (item) => item.changes.some((c) => c.field === field && (to === undefined || c.to === to));
@@ -36,6 +38,7 @@ export const MONITOR_CATEGORIES = [
   { key: 'recycled', group: 'review', tone: 'amber', test: hasNote('recycled') },
   { key: 'duplicate', group: 'review', tone: 'amber', test: hasNote('duplicate') },
   { key: 'nameDiffers', group: 'review', tone: 'amber', test: hasNote('nameDiffers') },
+  { key: 'nameTaken', group: 'review', tone: 'amber', test: hasNote('nameTaken') },
   { key: 'otherNote', group: 'review', tone: 'gray', test: hasNote('otherNote') },
   { key: 'error', group: 'errors', tone: 'red', test: (item) => Boolean(item.error) },
 ];
