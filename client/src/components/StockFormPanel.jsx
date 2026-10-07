@@ -145,7 +145,7 @@ export default function StockFormPanel({ editingStock, onExitEdit, onSaved }) {
 
   return (
     <Card title={editingStock ? t('editTitle')(editingStock.stock_symbol) : t('addTitle')}>
-      {!editingStock && <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">{t('addHelp')}</p>}
+      {!editingStock && <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">{t('addHelp')}</p>}
       <form id="stock-form" onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
         <Field htmlFor="stock-symbol" label={t('labelSymbol')}>
           <Input id="stock-symbol" className="uppercase" placeholder="AAPL" required ref={symbolInputRef} value={symbol} onChange={(e) => setSymbol(e.target.value)} />
