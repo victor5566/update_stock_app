@@ -22,7 +22,7 @@ export function Card({ title, actions, children, className, id }) {
 
 const BUTTON_VARIANTS = {
   primary: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 focus-visible:outline-blue-600',
-  secondary: 'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
+  secondary: 'border border-slate-300 bg-white text-slate-900 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
   subtle: 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25',
   danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:outline-red-600',
 };
@@ -55,7 +55,7 @@ export function Select({ className, children, ...props }) {
 export function Field({ label, htmlFor, children, className }) {
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-slate-700 dark:text-slate-300">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs font-medium text-slate-900 dark:text-slate-100">{label}</label>
       {children}
     </div>
   );
@@ -63,7 +63,7 @@ export function Field({ label, htmlFor, children, className }) {
 
 const ALERT_TONES = {
   error: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200',
-  info: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300',
+  info: 'border-slate-200 bg-slate-50 text-slate-900 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-100',
   warn: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
 };
@@ -79,7 +79,7 @@ export function Alert({ tone = 'info', children, id, className, live }) {
 const BADGE_TONES = {
   green: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300',
   red: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300',
-  gray: 'bg-slate-100 text-slate-700 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300',
+  gray: 'bg-slate-100 text-slate-900 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-100',
   blue: 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-300',
   amber: 'bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300',
 };
@@ -95,7 +95,7 @@ export function Badge({ tone = 'gray', children, title }) {
 const CHIP_TONES = {
   green: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
   red: 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300',
-  gray: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200',
+  gray: 'border-slate-300 bg-slate-100 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100',
   blue: 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
   amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
 };
@@ -135,7 +135,7 @@ export function Pagination({ page, totalPages, total, onPage, idPrefix = '' }) {
   const t = useT();
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span id={`${idPrefix}page-indicator`} className="text-sm text-slate-600 dark:text-slate-300">{t('pageIndicator')(page, totalPages, total)}</span>
+      <span id={`${idPrefix}page-indicator`} className="text-sm text-slate-800 dark:text-slate-100">{t('pageIndicator')(page, totalPages, total)}</span>
       <div className="flex gap-2">
         <Button id={`${idPrefix}prev-page-btn`} size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>{t('prevPage')}</Button>
         <Button id={`${idPrefix}next-page-btn`} size="sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>{t('nextPage')}</Button>
@@ -145,8 +145,8 @@ export function Pagination({ page, totalPages, total, onPage, idPrefix = '' }) {
 }
 
 // Table pieces, so every table looks the same.
-export const TH = 'px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300';
-export const TD = 'px-3 py-2.5 align-top text-slate-800 dark:text-slate-200';
+export const TH = 'px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-800 dark:text-slate-100';
+export const TD = 'px-3 py-2.5 align-top text-slate-900 dark:text-slate-100';
 
 export function Table({ id, head, children }) {
   return (
@@ -173,7 +173,7 @@ export function LangSelect({ lang, setLang }) {
       aria-label="Language"
       value={lang}
       onChange={(e) => setLang(e.target.value)}
-      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
     >
       <option value="zh">中文</option>
       <option value="en">English</option>
@@ -187,7 +187,7 @@ export function PageHeader({ title, subtitle, lang, setLang }) {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div className="min-w-0">
           <h1 id="page-heading" className="truncate text-xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
-          {subtitle && <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{subtitle}</div>}
+          {subtitle && <div className="mt-0.5 text-sm text-slate-800 dark:text-slate-100">{subtitle}</div>}
         </div>
         <LangSelect lang={lang} setLang={setLang} />
       </div>
