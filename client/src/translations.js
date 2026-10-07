@@ -136,6 +136,7 @@ export const TRANSLATIONS = {
       recycled: '代號已被其他公司使用',
       duplicate: '代號重複',
       nameDiffers: '名稱不一致',
+      nameTaken: '名稱已被同代號另一筆使用',
       otherNote: '其他說明',
       error: '寫入失敗',
     },
@@ -143,6 +144,7 @@ export const TRANSLATIONS = {
       recycled: (name) => `代號目前由另一家公司交易（${name}），維持下市`,
       duplicate: () => '代號交易中，但已有另一筆未下市資料使用這個代號，維持下市',
       nameDiffers: (name) => `資料來源的名稱不同：${name}（未自動更正，請人工確認）`,
+      nameTaken: (id, delisted, name) => `應改名為「${name}」，但同代號的另一筆${delisted ? '已下市' : ''}資料（id ${id}）已經用這個名稱（資料表不允許代號與名稱都相同），這筆暫不做任何更動，請人工確認`,
     },
   },
   en: {
@@ -281,6 +283,7 @@ export const TRANSLATIONS = {
       recycled: 'Symbol used by another company',
       duplicate: 'Duplicate symbol',
       nameDiffers: 'Name differs',
+      nameTaken: 'Name held by another row',
       otherNote: 'Other notes',
       error: 'Write failed',
     },
@@ -288,6 +291,7 @@ export const TRANSLATIONS = {
       recycled: (name) => `The symbol now trades as another company (${name}) - left delisted`,
       duplicate: () => 'The symbol is trading, but another non-delisted row already has it - left delisted',
       nameDiffers: (name) => `The sources give a different name: ${name} (not changed automatically - please check)`,
+      nameTaken: (id, delisted, name) => `Should be renamed to "${name}", but another${delisted ? ' delisted' : ''} row with this symbol (id ${id}) already has that name (the table doesn't allow two rows with the same symbol and name) - nothing changed on this row, please check`,
     },
   },
 };
