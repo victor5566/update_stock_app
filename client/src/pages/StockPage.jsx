@@ -33,7 +33,7 @@ function AutoFillNotice({ report }) {
 function DetailRow({ label, id, children, wide }) {
   return (
     <div className={cx('py-3 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-4', wide && 'sm:col-span-2')}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-700 dark:text-slate-300">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-900 dark:text-slate-100">{label}</dt>
       <dd id={id} className="mt-1 break-words text-sm text-slate-900 sm:mt-0 dark:text-slate-100">{children}</dd>
     </div>
   );
@@ -99,9 +99,9 @@ export default function StockPage() {
       <PageHeader title={title} subtitle={backLink} lang={lang} setLang={setLang} />
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
         {notFound && (
-          <Card id="not-found-section"><p className="text-sm text-slate-700 dark:text-slate-300">{t('stockNotFound')}</p></Card>
+          <Card id="not-found-section"><p className="text-sm text-slate-900 dark:text-slate-100">{t('stockNotFound')}</p></Card>
         )}
-        {!stock && !notFound && <p className="text-sm text-slate-600">{t('loading')}</p>}
+        {!stock && !notFound && <p className="text-sm text-slate-800">{t('loading')}</p>}
         {stock && (
           <Card
             id="detail-section"

@@ -28,7 +28,7 @@ function CategoryFilter({ items, category, onPick }) {
         if (!cats.length) return null;
         return (
           <div key={g.key} className="flex flex-wrap items-center gap-2">
-            <span className="w-full text-xs font-medium text-slate-600 sm:w-40 dark:text-slate-300">{t(g.labelKey)}</span>
+            <span className="w-full text-xs font-medium text-slate-800 sm:w-40 dark:text-slate-100">{t(g.labelKey)}</span>
             {cats.map((c) => (
               <Chip key={c.key} id={`monitor-cat-${c.key}`} tone={c.tone} active={category === c.key} count={counts[c.key]} onClick={() => onPick(c.key)}>
                 {t('monitorCats')[c.key]}
@@ -37,7 +37,7 @@ function CategoryFilter({ items, category, onPick }) {
           </div>
         );
       })}
-      <p className="text-xs text-slate-600 dark:text-slate-300">{t('monitorCatHint')}</p>
+      <p className="text-xs text-slate-800 dark:text-slate-100">{t('monitorCatHint')}</p>
     </div>
   );
 }
@@ -158,7 +158,7 @@ export default function MonitorPanel({ onApplied }) {
 
   return (
     <Card title={t('monitorTitle')} actions={actions}>
-      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{t('monitorHelp')}</p>
+      <p className="mb-3 text-sm text-slate-800 dark:text-slate-100">{t('monitorHelp')}</p>
       {statusLines.length > 0 && (
         <Alert id="monitor-status" tone={state && state.lastError && !running ? 'error' : 'info'} live="polite" className="mb-4">
           <Lines lines={statusLines} />
@@ -176,7 +176,7 @@ export default function MonitorPanel({ onApplied }) {
           const lines = [
             ...item.changes.map((c, i) => <span key={`c${i}`}>{`${t('monitorFields')[c.field] || c.field}: ${describeValue(c.field, c.from, t)} → ${describeValue(c.field, c.to, t)}`}</span>),
             ...item.notes.map((n, i) => (
-              <span key={`n${i}`} className={noteKind(n).kind === 'otherNote' ? 'text-slate-600 dark:text-slate-300' : 'text-amber-700 dark:text-amber-300'}>{describeNote(n, t)}</span>
+              <span key={`n${i}`} className={noteKind(n).kind === 'otherNote' ? 'text-slate-800 dark:text-slate-100' : 'text-amber-700 dark:text-amber-300'}>{describeNote(n, t)}</span>
             )),
             ...(item.error ? [<span key="e" className="text-red-600 dark:text-red-400">{item.error}</span>] : []),
           ];
@@ -191,7 +191,7 @@ export default function MonitorPanel({ onApplied }) {
         })}
       </Table>
       {shown.length === 0 && (
-        <p id="monitor-empty-state" className="py-8 text-center text-sm text-slate-600">{items.length ? t('monitorCatEmpty') : t('monitorEmpty')}</p>
+        <p id="monitor-empty-state" className="py-8 text-center text-sm text-slate-800">{items.length ? t('monitorCatEmpty') : t('monitorEmpty')}</p>
       )}
       <Pagination page={shownPage} totalPages={totalPages} total={shown.length} onPage={setPage} idPrefix="monitor-" />
     </Card>
