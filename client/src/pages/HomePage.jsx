@@ -125,7 +125,7 @@ export default function HomePage() {
         'whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition',
         tab === id
           ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-          : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+          : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-200',
       )}
     >
       {label}
@@ -178,7 +178,7 @@ export default function HomePage() {
         ))}
         {panel('edit', (
           <>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('editSectionHelp')}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{t('editSectionHelp')}</p>
             <LookupEditForm name="rename" onSuggest={suggestSymbols} onUpdated={refreshList} />
             <LookupEditForm name="symbol" onSuggest={suggestSymbols} onUpdated={refreshList} />
             <LookupEditForm name="market" onSuggest={suggestSymbols} onUpdated={() => { refreshList(); fetchMarkets(); }} />

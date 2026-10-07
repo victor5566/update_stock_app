@@ -42,7 +42,7 @@ export default function StockListPanel({ stockPage, loading, search, marketFilte
           </tr>
         ))}
       </Table>
-      {rows.length === 0 && <p id="empty-state" className="py-8 text-center text-sm text-slate-500">{loading ? t('loading') : t('emptyState')}</p>}
+      {rows.length === 0 && <p id="empty-state" className="py-8 text-center text-sm text-slate-600">{loading ? t('loading') : t('emptyState')}</p>}
       <Pagination page={page} totalPages={totalPages} total={total} onPage={onPage} />
     </Card>
   );
