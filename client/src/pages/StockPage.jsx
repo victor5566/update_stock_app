@@ -30,6 +30,14 @@ function AutoFillNotice({ report }) {
   );
 }
 
+// A stored website without a scheme ("www.saudicab.com") would resolve as a path inside this
+// site, so it gets https://. Anything that isn't http(s) after that isn't linked at all.
+function websiteHref(url) {
+  const u = String(url).trim();
+  const href = /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https://${u.replace(/^\/+/, '')}`;
+  return /^https?:\/\//i.test(href) ? href : null;
+}
+
 function DetailRow({ label, id, children, wide }) {
   return (
     <div className={cx('py-3 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-4', wide && 'sm:col-span-2')}>
@@ -84,6 +92,8 @@ export default function StockPage() {
   }, [symbol, id]);
 
   useEffect(() => {
+    // Another stock (in-app navigation keeps this component): its own auto-fill polls.
+    autoFillPolls.current = 0;
     loadStock();
     return () => clearTimeout(refreshTimer.current);
   }, [loadStock]);
@@ -127,9 +137,10 @@ export default function StockPage() {
               <DetailRow label={t('labelCeo')} id="detail-ceo">{dash(stock.ceo)}</DetailRow>
               <DetailRow label={t('labelLocation')} id="detail-company-location" wide>{dash(stock.company_location)}</DetailRow>
               <DetailRow label={t('labelUrl')} id="detail-url" wide>
-                {stock.urll
-                  ? <a href={stock.urll} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">{stock.urll}</a>
-                  : '-'}
+                {!stock.urll ? '-'
+                  : websiteHref(stock.urll)
+                    ? <a href={websiteHref(stock.urll)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">{stock.urll}</a>
+                    : stock.urll}
               </DetailRow>
               <DetailRow label={t('labelDescription')} id="detail-description" wide>
                 <p className="whitespace-pre-wrap leading-relaxed">{dash(stock.description)}</p>

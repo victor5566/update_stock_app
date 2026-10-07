@@ -116,7 +116,16 @@ export default function LookupEditForm({ name, onSuggest, onUpdated }) {
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(data.errors?.join(', ') || t('operationFailed'));
+      // 409: the new symbol is held by another live row (existing_symbol: the spelling held), or
+      // the new symbol + name is another row's (symbol_name_taken - the table's unique index).
+      if (data.code === 'symbol_name_taken') {
+        setError(<>{t('symbolNameTaken')(data.existing_symbol, data.existing_delisted)}<StockLink symbol={data.existing_symbol} id={data.existing_id} /></>);
+      } else if (res.status === 409) {
+        const held = data.existing_symbol || value;
+        setError(<>{t('symbolInUse')(held)}<StockLink symbol={held} /></>);
+      } else {
+        setError(data.errors?.join(', ') || t('operationFailed'));
+      }
       return;
     }
     reset();
