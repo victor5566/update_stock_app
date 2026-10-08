@@ -26,8 +26,8 @@ export function describeNote(note, t) {
 const hasChange = (field, to) => (item) => item.changes.some((c) => c.field === field && (to === undefined || c.to === to));
 const hasNote = (kind) => (item) => item.notes.some((n) => noteKind(n).kind === kind);
 
-// One row can be in several categories. Grouped into what was changed, what needs a person,
-// and errors.
+// One row can be in several categories. Grouped into what was (or would be) changed, what needs a person, what an applying run filled in (company details / CUSIP), and
+// what couldn't be written.
 export const MONITOR_CATEGORIES = [
   { key: 'delist', group: 'changes', tone: 'red', test: hasChange('isdelisted', true) },
   { key: 'revive', group: 'changes', tone: 'green', test: hasChange('isdelisted', false) },
@@ -40,11 +40,22 @@ export const MONITOR_CATEGORIES = [
   { key: 'nameDiffers', group: 'review', tone: 'amber', test: hasNote('nameDiffers') },
   { key: 'nameTaken', group: 'review', tone: 'amber', test: hasNote('nameTaken') },
   { key: 'otherNote', group: 'review', tone: 'gray', test: hasNote('otherNote') },
-  { key: 'error', group: 'errors', tone: 'red', test: (item) => Boolean(item.error) },
+  { key: 'detailsFilled', group: 'fills', tone: 'green', test: (item) => Boolean(item.filled && item.filled.details) },
+  { key: 'cusipFilled', group: 'fills', tone: 'green', test: (item) => Boolean(item.filled && item.filled.cusip) },
+  { key: 'cusipConflict', group: 'errors', tone: 'amber', test: (item) => Boolean(item.cusipConflict) },
+  { key: 'error', group: 'errors', tone: 'red', test: (item) => Boolean(item.error || item.fillError) },
 ];
 
+// What the "Update results" page lists: rows an applying run wrote to (or tried to). Rows that
+// only carry a note were not changed - they are on the preview page.
+export const isApplyResult = (item) => Boolean(
+  (item.changes.length > 0) || item.filled || item.cusipConflict || item.error || item.fillError,
+);
+
 export const MONITOR_GROUPS = [
-  { key: 'changes', labelKey: 'monitorGroupChanges' },
+  // The preview page keeps its original labels; the update page names what was written.
+  { key: 'changes', labelKey: 'monitorGroupChanges', applyLabelKey: 'monitorGroupApplied' },
+  { key: 'fills', labelKey: 'monitorGroupFills' },
   { key: 'review', labelKey: 'monitorGroupReview' },
-  { key: 'errors', labelKey: 'monitorGroupErrors' },
+  { key: 'errors', labelKey: 'monitorGroupErrors', applyLabelKey: 'monitorGroupApplyErrors' },
 ];

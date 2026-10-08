@@ -4,15 +4,16 @@ const { runStockMonitor } = require('../lib/stockMonitor');
 
 const router = express.Router();
 
-// One run at a time, in the background; the UI polls GET /status. State is in-process, so a
-// server restart forgets the last report (the table itself keeps every change).
+// One run at a time, in the background; the UI polls GET /status. The last preview and the last
+// applying run are kept separately (the UI shows them on separate pages). State is in-process, so
+// a server restart forgets them (the table itself keeps every change).
 const state = {
   running: false,
   apply: false,
   trigger: null, // 'manual' | 'schedule'
   startedAt: null,
   progress: null,
-  lastReport: null,
+  reports: { preview: null, apply: null },
   lastError: null,
   nextScheduledAt: null,
   stopRequested: false,
@@ -29,7 +30,7 @@ function startRun({ apply, trigger }) {
     onProgress: (p) => { state.progress = p; },
   })
     .then((report) => {
-      state.lastReport = { ...report, trigger };
+      state.reports = { ...state.reports, [apply ? 'apply' : 'preview']: { ...report, trigger } };
       const c = report.counts;
       console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, details filled ${report.details.filled}, cusip filled ${report.cusip.filled}`);
     })
@@ -61,16 +62,18 @@ router.post('/stop', (req, res) => {
   res.status(202).json({ stopping: true });
 });
 
-// GET /api/monitor/status - running state + the last report's summary (no item list).
+// GET /api/monitor/status - running state + both reports' summaries (no item lists).
 router.get('/status', (req, res) => {
-  const { lastReport, ...rest } = state;
-  const summary = lastReport && (({ items, ...s }) => ({ ...s, itemCount: items.length }))(lastReport);
-  res.json({ ...rest, lastReport: summary });
+  const { reports, ...rest } = state;
+  const summary = (r) => r && (({ items, ...s }) => ({ ...s, itemCount: items.length }))(r);
+  res.json({ ...rest, reports: { preview: summary(reports.preview), apply: summary(reports.apply) } });
 });
 
-// GET /api/monitor/report - the last report's per-stock items (changes and notes).
+// GET /api/monitor/report?mode=preview|apply - that report's per-stock items (changes, notes and,
+// for an applying run, the company details / CUSIPs filled).
 router.get('/report', (req, res) => {
-  res.json(state.lastReport ? state.lastReport.items : []);
+  const report = state.reports[req.query.mode === 'apply' ? 'apply' : 'preview'];
+  res.json(report ? report.items : []);
 });
 
 // MONITOR_DAILY_AT=HH:MM in .env runs an applying check every day at that local time.

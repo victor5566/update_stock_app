@@ -175,9 +175,9 @@ export function LangSelect({ lang, setLang }) {
       onChange={(e) => setLang(e.target.value)}
       className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
     >
-      {/* Labels in the current language: the English UI must show only English text. */}
-      <option value="zh">{lang === 'en' ? 'Chinese' : '中文'}</option>
-      <option value="en">{lang === 'en' ? 'English' : '英文'}</option>
+      {/* Always in English, in both languages (the user, 2026-10-08). */}
+      <option value="zh">Chinese</option>
+      <option value="en">English</option>
     </select>
   );
 }

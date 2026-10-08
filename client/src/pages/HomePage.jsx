@@ -1,5 +1,6 @@
 // Main page: tabs for the stock list, add stock, the lookup-before-edit forms and the stock
-// monitor. The tab is kept in the URL hash (#list, #form, #edit, #monitor).
+// monitor. The tab is kept in the URL hash (#list, #form, #edit, #monitor; the monitor's own
+// pages add /preview or /apply).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LangContext, useLang } from '../i18n';
 import { TRANSLATIONS } from '../translations';
@@ -13,7 +14,7 @@ import MonitorPanel from '../components/MonitorPanel';
 const TABS = ['list', 'form', 'edit', 'monitor'];
 
 function tabFromHash() {
-  const tab = window.location.hash.slice(1);
+  const tab = window.location.hash.slice(1).split('/')[0];
   return TABS.includes(tab) ? tab : 'list';
 }
 
@@ -45,7 +46,7 @@ export default function HomePage() {
 
   function showTab(next) {
     setTab(next);
-    if (window.location.hash !== `#${next}`) window.history.replaceState(window.history.state, '', `#${next}`);
+    if (tabFromHash() !== next) window.history.replaceState(window.history.state, '', `#${next}`);
   }
 
   // keepPage: stay on the current page (after an edit) instead of going back to page 1.
