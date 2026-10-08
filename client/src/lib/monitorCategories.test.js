@@ -1,4 +1,4 @@
-import { MONITOR_CATEGORIES, describeNote, noteKind } from './monitorCategories';
+import { MONITOR_CATEGORIES, describeNote, isApplyResult, noteKind } from './monitorCategories';
 import { TRANSLATIONS } from '../translations';
 
 const t = (key) => TRANSLATIONS.zh[key];
@@ -38,4 +38,18 @@ test('a rename blocked by the (symbol, name) index is its own category', () => {
   expect(text).toContain('8837');
   expect(text).toContain('已下市');
   expect(describeNote('name already used by another row with this symbol (id 5): X Corp - nothing changed', t)).not.toContain('已下市');
+});
+
+test('an applying run lists changed and filled rows, not note-only rows', () => {
+  const base = { changes: [], notes: [] };
+  const filled = { ...base, filled: { details: ['sector'], cusip: '037833100' } };
+  expect(MONITOR_CATEGORIES.filter((c) => c.test(filled)).map((c) => c.key)).toEqual(['detailsFilled', 'cusipFilled']);
+  const conflict = { ...base, cusipConflict: { cusip: '037833100', id: 1, stock_symbol: 'AAPL' } };
+  expect(MONITOR_CATEGORIES.filter((c) => c.test(conflict)).map((c) => c.key)).toEqual(['cusipConflict']);
+  expect(MONITOR_CATEGORIES.find((c) => c.key === 'error').test({ ...base, fillError: { part: 'cusip', message: 'timeout' } })).toBe(true);
+  expect(isApplyResult(filled)).toBe(true);
+  expect(isApplyResult(conflict)).toBe(true);
+  expect(isApplyResult({ ...base, changes: [{ field: 'exchange', from: 'PNK', to: 'OTC' }] })).toBe(true);
+  expect(isApplyResult({ ...base, notes: ['name differs: X Corp'] })).toBe(false);
+  expect(t('monitorCusipConflict')(conflict.cusipConflict)).toContain('AAPL');
 });
