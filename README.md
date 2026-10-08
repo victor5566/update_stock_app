@@ -65,14 +65,15 @@ There is nothing to create: the app only uses `company_profiles`. The login role
 ```bash
 npm run build       # install the client's packages and build the React app (client/build)
 npm start           # production: node server.js
-npm run dev         # development: the API server, restarts automatically on file changes
-npm run dev:client  # development: the React dev server on port 3001 with hot reload (run next to npm run dev)
+npm run dev         # development: API server (port 3000, restarts on file changes) + React dev server (port 3001, hot reload), both in one terminal
+npm run server      # development: only the API server (node --watch server.js)
+npm run client      # development: only the React dev server on port 3001
 npm test            # the React app's tests (Jest)
 ```
 
 Run `npm run build` at least once before `npm start`, and again after changing anything in `client/`: the server serves the built files. Run npm in WSL, not PowerShell (`node_modules` is shared between Windows and WSL).
 
-Open <http://localhost:3000> (during development with `npm run dev:client`: <http://localhost:3001>, which forwards `/api` to port 3000). The API is under `/api`, for example <http://localhost:3000/api/health>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
+Open <http://localhost:3000> (during development with `npm run dev`: <http://localhost:3001>, which forwards `/api` to port 3000). The API is under `/api`, for example <http://localhost:3000/api/health>. If `localhost` doesn't reach WSL from Windows, use the WSL IP instead, for example `http://172.18.x.x:3000`.
 
 ### 1.6 Deploy to a remote Linux server
 
