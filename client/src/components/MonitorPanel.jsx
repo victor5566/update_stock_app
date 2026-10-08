@@ -78,7 +78,10 @@ export default function MonitorPanel({ onApplied }) {
     if (report && report.finishedAt !== reportShown.current) {
       reportShown.current = report.finishedAt;
       const itemsRes = await fetch(`${API}/monitor/report`).catch(() => null);
-      const list = itemsRes && itemsRes.ok ? await itemsRes.json() : [];
+      let list = itemsRes && itemsRes.ok ? await itemsRes.json() : [];
+      // After Check & Update, rows whose changes were written are done - only what wasn't
+      // updated stays (notes that need a person, write errors). A preview shows everything.
+      if (report.apply) list = list.filter((item) => item.error || item.notes.length > 0);
       // Changed rows first, then rows that only carry a note.
       list.sort((a, b) => (b.changes.length > 0) - (a.changes.length > 0));
       setItems(list);
