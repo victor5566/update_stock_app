@@ -57,6 +57,7 @@ jobs:
               rm -rf ${{ needs.setup.outputs.dir }} && \
               git clone --branch ${{ needs.setup.outputs.branch }} https://${{ secrets.GITHUBUSERNAME }}:${{ secrets.GITHUBTOKEN }}@github.com/infocast-tw/company_profiles.git ${{ needs.setup.outputs.dir }} && \
               cd ${{ needs.setup.outputs.dir }} && \
+              printf 'PGHOST=${{ secrets.PGHOST }}\nPGPORT=${{ secrets.PGPORT }}\nPGUSER=${{ secrets.PGUSER }}\nPGPASSWORD=${{ secrets.PGPASSWORD }}\nPGDATABASE=${{ secrets.PGDATABASE }}\nPGSCHEMA=${{ secrets.PGSCHEMA }}\nPORT=${{ vars.PORT }}\nMONITOR_DAILY_AT=${{ vars.MONITOR_DAILY_AT }}\nSEC_EDGAR_CONTACT=${{ vars.SEC_EDGAR_CONTACT }}\n' > .env && \
               npm install && \
               npm run build
             "
