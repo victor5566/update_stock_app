@@ -13,9 +13,10 @@
 ```bash
 npm install
 npm start          # node server.js
-npm run dev         # node --watch server.js
+npm run dev         # concurrently：同時執行 npm run server + npm run client，一個終端機即可
+npm run server      # node --watch server.js
 npm run build       # 在 client/ 執行 npm ci（含 dev 套件），再 react-scripts build -> client/build
-npm run dev:client  # CRA 開發伺服器 :3001（熱更新），/api 轉送到 :3000 的伺服器
+npm run client      # CRA 開發伺服器 :3001（熱更新），/api 轉送到 :3000 的伺服器
 npm test            # 前端的 Jest 測試（react-scripts test，不 watch）
 ```
 
@@ -23,7 +24,7 @@ npm test            # 前端的 Jest 測試（react-scripts test，不 watch）
 
 **部署**：`deploy/setup-server.sh`（一次）、`deploy/deploy.sh [ref]`、`deploy/rollback.sh`——systemd 服務，版本放在 `/opt/stock-app`，伺服器有自己的 `shared/.env`，服務時區 `America/New_York`。手冊：`docs/Deployment_Guide_{zh-TW,en}.docx`。`company_profiles` repo 另外用自己的 `.github/workflows/deploy.yml` 部署（LXC 容器內的 PM2，push 到 main/dev/test 時觸發）。
 
-**文件**（`docs/`，只有 Word 檔——使用者要 .docx，不要 Markdown 副本）：`Stock_System_Guide_{zh-TW,en}.docx`（安裝、網頁功能、偵測與 CUSIP 查詢的運作方式、命令列工具、欄位、疑難排解）和 `Deployment_Guide_{zh-TW,en}.docx`（`deploy/` 腳本、在伺服器上手動建置、company_profiles 的 GitHub Actions 流程）。中英文版結構相同。修改到安裝、介面、部署或文件描述的行為時，四份都要更新，並轉成 PDF 等方式檢查排版。最近一次重新產生是 2026-10-07，對應 create-react-app + Tailwind 前端。
+**文件**（`docs/`，只有 Word 檔——使用者要 .docx，不要 Markdown 副本）：`Stock_System_Guide_{zh-TW,en}.docx`（安裝、網頁功能、偵測與 CUSIP 查詢的運作方式、命令列工具、欄位、疑難排解）和 `Deployment_Guide_{zh-TW,en}.docx`（`deploy/` 腳本、在伺服器上手動建置、company_profiles 的 GitHub Actions 流程）。中英文版結構相同。修改到安裝、介面、部署或文件描述的行為時，四份都要更新，並轉成 PDF 等方式檢查排版。最近一次重新產生是 2026-10-07，對應 create-react-app + Tailwind 前端；2026-10-08 系統手冊改為 `concurrently` 的開發指令，並把偵測上限改成 1000 / 300（直接修改，已檢查排版）。
 
 整個專案在 WSL（Linux）中開發與執行，雖然專案資料夾實際放在 Windows 檔案系統（從 WSL 看是 `/mnt/c/Users/...`）。所有 `node`／`npm` 指令都要在 WSL shell 裡執行，不要用 PowerShell。從 Windows 連 `localhost:3000` 依賴 WSL 的 localhost 轉發，這個轉發曾經壞掉（沒有 `wslrelay` 在跑）；用 WSL 的 IP（`wsl hostname -I`）仍然可以連。
 
@@ -107,7 +108,7 @@ repo 的 `origin` 是 https://github.com/victor5566/update_stock_app（分支 `m
 - `audit-stocks.js [--out 路徑.csv]`——**唯讀**交叉比對未下市的 NASDAQ/NYSE/AMEX/OTC 資料（其他市場略過——來源不認得它們）與 NASDAQ Trader 清單、SEC 的 `company_tickers.json`、Yahoo，輸出 `exports/audit-report.csv`（不進 git）供人工檢查：代號變更、下市、名稱被截斷、名稱不符（只有兩個來源一致反對我們時才報）。依結果用 `applyStockUpdate` 修改；下市請設 `isdelisted = true`，絕不刪除。
 - `export-to-csv.js`——把整張表匯出到 `exports/stocks.csv`（格式在 `lib/stockCsv.js`：實際欄位名稱，含 `companysite`，與 `GET /api/stocks/export.csv` 共用，會加 UTF-8 BOM 讓 Excel 正確顯示重音字）。約 7.9 萬筆含簡介，檔案約 9 MB，所以 `exports/` 已加入 gitignore——不要 commit。簡介中有換行（在引號內），計算筆數請用 CSV 解析器，不要用 `wc -l`。
 
-**前端**（`client/`）——**create-react-app + Tailwind CSS**。2026-10-07 使用者要求整個前端打掉，用 `npx create-react-app` 重做（「讓之後網站可以擴充維護」），功能不變；之前的前端（原生 JS、不用 JSX 的 UMD React）都已移除。`client/` 是獨立的 npm 套件（2026-10-07 確認：`react-scripts` 5.0.1、React 19.3、`react-router-dom` 7.18、Tailwind CSS **3.4** 為 devDependency——CRA 透過 PostCSS 自動讀取 `tailwind.config.js`；Tailwind v4 與 CRA 不相容，請維持 v3）。Tailwind 掃描 `src/**/*.{js,jsx}`，所以 **class 名稱必須寫成完整的字串**（不要 `'bg-' + color`）。Express 提供 `client/build`，所有非 `/api` 路徑都回傳其 `index.html`（尚未建置時回 503 文字）；未知的 `/api/...` 回 JSON 404，`GET /api/health` 是部署用的健康檢查。開發時同時執行伺服器（`npm run dev`）和 `npm run dev:client`（port 3001，CRA 的 `"proxy": "http://localhost:3000"` 轉送 `/api`）。npm 請在 WSL 執行（`node_modules` 與 Windows 共用）。結構（`client/src/`）：
+**前端**（`client/`）——**create-react-app + Tailwind CSS**。2026-10-07 使用者要求整個前端打掉，用 `npx create-react-app` 重做（「讓之後網站可以擴充維護」），功能不變；之前的前端（原生 JS、不用 JSX 的 UMD React）都已移除。`client/` 是獨立的 npm 套件（2026-10-07 確認：`react-scripts` 5.0.1、React 19.3、`react-router-dom` 7.18、Tailwind CSS **3.4** 為 devDependency——CRA 透過 PostCSS 自動讀取 `tailwind.config.js`；Tailwind v4 與 CRA 不相容，請維持 v3）。Tailwind 掃描 `src/**/*.{js,jsx}`，所以 **class 名稱必須寫成完整的字串**（不要 `'bg-' + color`）。Express 提供 `client/build`，所有非 `/api` 路徑都回傳其 `index.html`（尚未建置時回 503 文字）；未知的 `/api/...` 回 JSON 404，`GET /api/health` 是部署用的健康檢查。開發時執行 `npm run dev`——`concurrently`（根目錄 devDependency，2026-10-08 依使用者要求：一個指令取代兩個）會同時啟動帶 `--watch` 的伺服器（`npm run server`，port 3000）和 CRA 開發伺服器（`npm run client`，port 3001，CRA 的 `"proxy": "http://localhost:3000"` 轉送 `/api`）。npm 請在 WSL 執行（`node_modules` 與 Windows 共用）。結構（`client/src/`）：
 - `index.js`：`BrowserRouter`，`/` -> `pages/HomePage.jsx`，`/:symbol` -> `pages/StockPage.jsx`，`*` -> `pages/NotFoundPage.jsx`（`/a/b` 這類較深的路徑以前會是空白頁）。`index.css`：Tailwind 指令與 body 基本樣式。
 - **語言規則（使用者 2026-10-07）：英文介面只能出現英文，兩種語言都不能有亂碼。** 所有介面文字都走 `TRANSLATIONS`——`client/src` 其他地方不能寫中文字面值（語言下拉選單的選項也會翻譯：英文介面是 Chinese/English，中文介面是 中文/英文）。`client/public/index.html` 的 `<title>` 是英文，另有一段 inline script 在 React 載入前依記住的語言設定中文標題與 `<html lang>`。2026-10-07 用 headless Chrome 逐一檢查兩種語言的每個分頁、偵測報告的每個分類（模擬含所有說明類型的報告）、表單訊息、詳細頁、找不到頁面與自動補資料說明（模擬）——可見文字、標題、提示字、tooltip、選項——都沒有問題。伺服器傳到介面、未經翻譯的文字依設計是英文（`NOTE_PATTERNS` 沒對到的偵測說明、資料庫原始錯誤）。資料照存放的內容顯示——見「資料表的資料特性」裡的亂碼說明。
 - `translations.js`（`TRANSLATIONS`，zh/en，兩頁的字串）、`i18n.js`（`LangContext`／`useT()`／`useLang(titleKey)`；語言存在 `localStorage`，以 try/catch 包住）、`lib/stocks.js`（`API = '/api'`、`PAGE_SIZE`、`cx`、`stockHref()`、`autoFillProblems()`／`retryNote()`）、`lib/monitorCategories.js`（偵測結果分類，見下）。
