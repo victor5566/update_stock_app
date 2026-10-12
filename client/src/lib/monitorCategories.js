@@ -38,6 +38,8 @@ export const MONITOR_CATEGORIES = [
   { key: 'currency', group: 'changes', tone: 'blue', test: hasChange('currency') },
   // An applying run's company-detail refresh (lib/fillCompanyDetails.js): a stored value replaced.
   { key: 'detailsUpdated', group: 'changes', tone: 'blue', test: (item) => item.changes.some((c) => DETAIL_FIELDS.has(c.field)) },
+  // A stored CUSIP replaced by a newer one from SEC.
+  { key: 'cusipUpdated', group: 'changes', tone: 'blue', test: hasChange('cusips') },
   { key: 'recycled', group: 'review', tone: 'amber', test: hasNote('recycled') },
   { key: 'duplicate', group: 'review', tone: 'amber', test: hasNote('duplicate') },
   { key: 'nameDiffers', group: 'review', tone: 'amber', test: hasNote('nameDiffers') },

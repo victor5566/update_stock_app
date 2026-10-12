@@ -107,11 +107,11 @@ export const TRANSLATIONS = {
     monitorStopping: '正在中止，會在目前這筆處理完後停止…',
     monitorAlreadyRunning: '已有偵測正在執行',
     monitorFailed: (msg) => `偵測失敗：${msg}`,
-    monitorRunning: (apply, phase, done, total) => `${apply ? '偵測並更新中' : '預覽中'}：${({ loading: '讀取資料', quotes: '取得 Yahoo 報價', updating: '比對與更新', details: '補公司資料', cusip: '補 CUSIP' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
+    monitorRunning: (apply, phase, done, total) => `${apply ? '偵測並更新中' : '預覽中'}：${({ loading: '讀取資料', quotes: '取得 Yahoo 報價', updating: '比對與更新', details: '更新公司資料', cusip: '補 CUSIP', cusipRefresh: '檢查既有 CUSIP' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '【已中止：在取得報價階段停止，未寫入任何變更】' : `【已中止${r.apply ? '，中止前的變更已寫入' : ''}】`),
     monitorSummary: (r, fields) => `上次${r.apply ? '偵測並更新' : '預覽（未寫入）'}（${new Date(r.finishedAt).toLocaleString('zh-TW')}${r.trigger === 'schedule' ? '，排程' : ''}）：檢查 ${r.counts.checked.toLocaleString()} 筆，上市 ${r.counts.listed.toLocaleString()}、下市 ${r.counts.delisted.toLocaleString()}、無法判斷 ${r.counts.unknown.toLocaleString()}。`
       + `欄位變更：${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join('、') || '無'}${r.apply ? `（已更新 ${r.counts.updated} 筆${r.counts.errors ? `，失敗 ${r.counts.errors}` : ''}）` : ''}。`
-      + `公司資料：${r.apply ? `查了 ${r.details.tried} 筆，補上 ${r.details.filled} 筆、更新 ${r.details.updated || 0} 筆，` : ''}尚缺 ${r.details.missing.toLocaleString()} 筆。CUSIP：${r.apply ? `補了 ${r.cusip.filled}/${r.cusip.tried} 筆，` : ''}尚缺 ${r.cusip.missing.toLocaleString()} 筆。`
+      + `公司資料：${r.apply ? `查了 ${r.details.tried} 筆，補上 ${r.details.filled} 筆、更新 ${r.details.updated || 0} 筆，` : ''}尚缺 ${r.details.missing.toLocaleString()} 筆。CUSIP：${r.apply ? `補了 ${r.cusip.filled}/${r.cusip.tried} 筆，檢查既有 ${r.cusip.rechecked || 0} 筆、更新 ${r.cusip.updated || 0} 筆，` : ''}尚缺 ${r.cusip.missing.toLocaleString()} 筆。`
       + `${r.listingAvailable ? '' : '（注意：NASDAQ Trader 清單無法下載）'}${r.failedQuotes ? `（注意：${r.failedQuotes} 個代號 Yahoo 查詢失敗，狀態未變更）` : ''}`,
     monitorNext: (time) => `下次排程：${new Date(time).toLocaleString('zh-TW')}`,
     monitorThStatus: '狀態',
@@ -126,7 +126,7 @@ export const TRANSLATIONS = {
     monitorFillError: (part, msg) => `${part === 'cusip' ? '查詢 CUSIP 時' : '查詢公司資料時'}失敗：${msg}`,
     monitorCusipConflict: (c) => `找到 CUSIP ${c.cusip}，但 ${c.stock_symbol}（id ${c.id}）已經使用，未寫入，請人工確認`,
     monitorStatus: { listed: '上市', delisted: '下市', unknown: '無法判斷' },
-    monitorFields: { company_name: '名稱', exchange: '市場', isdelisted: '下市', category: 'Category', currency: '幣別' },
+    monitorFields: { company_name: '名稱', exchange: '市場', isdelisted: '下市', category: 'Category', currency: '幣別', cusips: 'CUSIP' },
     monitorGroupChanges: '自動變更',
     monitorGroupApplied: '已自動更新',
     monitorGroupFills: '補上資料',
@@ -149,6 +149,7 @@ export const TRANSLATIONS = {
       nameTaken: '名稱已被同代號另一筆使用',
       otherNote: '其他說明',
       detailsUpdated: '公司資料更新',
+      cusipUpdated: 'CUSIP 更新',
       detailsFilled: '補上公司資料',
       cusipFilled: '補上 CUSIP',
       cusipConflict: 'CUSIP 已被其他股票使用',
@@ -268,11 +269,11 @@ export const TRANSLATIONS = {
     monitorStopping: 'Stopping after the current row…',
     monitorAlreadyRunning: 'A check is already running',
     monitorFailed: (msg) => `Check failed: ${msg}`,
-    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({ loading: 'loading rows', quotes: 'fetching Yahoo quotes', updating: 'comparing & updating', details: 'filling company info', cusip: 'filling CUSIPs' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
+    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({ loading: 'loading rows', quotes: 'fetching Yahoo quotes', updating: 'comparing & updating', details: 'updating company info', cusip: 'filling CUSIPs', cusipRefresh: 'checking stored CUSIPs' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '[Stopped while fetching quotes - nothing was written] ' : `[Stopped${r.apply ? ' - changes made before the stop were written' : ''}] `),
     monitorSummary: (r, fields) => `Last ${r.apply ? 'check & update' : 'preview (nothing written)'} (${new Date(r.finishedAt).toLocaleString('en-US')}${r.trigger === 'schedule' ? ', scheduled' : ''}): checked ${r.counts.checked.toLocaleString()} - listed ${r.counts.listed.toLocaleString()}, delisted ${r.counts.delisted.toLocaleString()}, unknown ${r.counts.unknown.toLocaleString()}. `
       + `Field changes: ${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join(', ') || 'none'}${r.apply ? ` (${r.counts.updated} rows updated${r.counts.errors ? `, ${r.counts.errors} failed` : ''})` : ''}. `
-      + `Company info: ${r.apply ? `checked ${r.details.tried}, filled ${r.details.filled}, updated ${r.details.updated || 0}, ` : ''}${r.details.missing.toLocaleString()} still missing. CUSIP: ${r.apply ? `filled ${r.cusip.filled}/${r.cusip.tried}, ` : ''}${r.cusip.missing.toLocaleString()} still missing.`
+      + `Company info: ${r.apply ? `checked ${r.details.tried}, filled ${r.details.filled}, updated ${r.details.updated || 0}, ` : ''}${r.details.missing.toLocaleString()} still missing. CUSIP: ${r.apply ? `filled ${r.cusip.filled}/${r.cusip.tried}, re-checked ${r.cusip.rechecked || 0} stored, updated ${r.cusip.updated || 0}, ` : ''}${r.cusip.missing.toLocaleString()} still missing.`
       + `${r.listingAvailable ? '' : ' (warning: NASDAQ Trader listing unavailable)'}${r.failedQuotes ? ` (warning: ${r.failedQuotes} symbols failed on Yahoo - status left alone)` : ''}`,
     monitorNext: (time) => `Next scheduled run: ${new Date(time).toLocaleString('en-US')}`,
     monitorThStatus: 'Status',
@@ -287,7 +288,7 @@ export const TRANSLATIONS = {
     monitorFillError: (part, msg) => `${part === 'cusip' ? 'CUSIP' : 'Company info'} lookup failed: ${msg}`,
     monitorCusipConflict: (c) => `Found CUSIP ${c.cusip}, but ${c.stock_symbol} (id ${c.id}) already has it - not written, please check`,
     monitorStatus: { listed: 'Listed', delisted: 'Delisted', unknown: 'Unknown' },
-    monitorFields: { company_name: 'Name', exchange: 'Market', isdelisted: 'Delisted', category: 'Category', currency: 'Currency' },
+    monitorFields: { company_name: 'Name', exchange: 'Market', isdelisted: 'Delisted', category: 'Category', currency: 'Currency', cusips: 'CUSIP' },
     monitorGroupChanges: 'Changed automatically',
     monitorGroupApplied: 'Updated automatically',
     monitorGroupFills: 'Filled in',
@@ -310,6 +311,7 @@ export const TRANSLATIONS = {
       nameTaken: 'Name held by another row',
       otherNote: 'Other notes',
       detailsUpdated: 'Company info updated',
+      cusipUpdated: 'CUSIP updated',
       detailsFilled: 'Company info filled',
       cusipFilled: 'CUSIP filled',
       cusipConflict: 'CUSIP held by another stock',
