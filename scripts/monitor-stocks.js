@@ -34,7 +34,7 @@ async function main() {
   console.log(`\n${apply ? 'APPLIED' : 'PREVIEW (nothing written - pass --apply to write)'}`);
   console.log(`Checked ${counts.checked}: listed ${counts.listed}, delisted ${counts.delisted}, unknown ${counts.unknown}`);
   console.log(`Field changes: ${JSON.stringify(fieldCounts)}${apply ? `; rows updated ${counts.updated}, errors ${counts.errors}` : ''}`);
-  console.log(`Company details: ${details.missing} trading rows missing some; ${apply ? `tried ${details.tried}, filled ${details.filled}` : 'filled only with --apply'}`);
+  console.log(`Company details: ${details.missing} trading rows missing some; ${apply ? `tried ${details.tried}, filled ${details.filled}, updated ${details.updated}` : 'filled / updated only with --apply'}`);
   console.log(`CUSIP: ${cusip.missing} trading US rows missing; ${apply ? `tried ${cusip.tried}, filled ${cusip.filled}, conflicts ${cusip.conflicts}` : 'filled only with --apply'}`);
   if (!report.listingAvailable) console.log('WARNING: NASDAQ Trader listing unavailable - listed stocks were judged on Yahoo alone.');
   if (report.failedQuotes) console.log(`WARNING: ${report.failedQuotes} symbols failed on Yahoo - their status was left alone.`);

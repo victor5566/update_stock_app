@@ -10,7 +10,7 @@ import { Alert, Badge, Button, Card, Chip, Lines, Pagination, StockLink, Table, 
 const MONITOR_POLL_MS = 3000;
 const STATUS_BADGE = { listed: 'green', delisted: 'red', unknown: 'gray' };
 const VIEWS = ['preview', 'apply'];
-// Company detail columns (item.filled.details) -> the form's field labels.
+// Company detail columns (item.filled.details, and refreshed values in item.changes) -> the form's field labels.
 const DETAIL_LABEL = {
   sector: 'labelSector', industry: 'labelIndustry', currency: 'labelCurrency', company_location: 'labelLocation',
   companysite: 'labelUrl', description: 'labelDescription', ceo: 'labelCeo',
@@ -23,6 +23,8 @@ function viewFromHash() {
 
 function describeValue(field, value, t) {
   if (field === 'isdelisted') return value ? t('yes') : t('no');
+  // A description is a paragraph; the start is enough to see that it was rewritten.
+  if (field === 'description' && value && String(value).length > 60) return `${String(value).slice(0, 60)}…`;
   return value === null || value === undefined || value === '' ? '—' : String(value);
 }
 
@@ -106,7 +108,7 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
         {shown.slice(first, first + PAGE_SIZE).map((item) => {
           // Changes and fills in the normal colour, notes that need a person in amber, errors in red.
           const lines = [
-            ...item.changes.map((c, i) => <span key={`c${i}`}>{`${t('monitorFields')[c.field] || c.field}: ${describeValue(c.field, c.from, t)} → ${describeValue(c.field, c.to, t)}`}</span>),
+            ...item.changes.map((c, i) => <span key={`c${i}`}>{`${t('monitorFields')[c.field] || (DETAIL_LABEL[c.field] ? t(DETAIL_LABEL[c.field]) : c.field)}: ${describeValue(c.field, c.from, t)} → ${describeValue(c.field, c.to, t)}`}</span>),
             ...(item.filled && item.filled.details ? [<span key="fd" className="text-green-700 dark:text-green-300">{t('monitorFilledDetails')(detailNames(item.filled.details))}</span>] : []),
             ...(item.filled && item.filled.cusip ? [<span key="fc" className="text-green-700 dark:text-green-300">{t('monitorFilledCusip')(item.filled.cusip)}</span>] : []),
             ...item.notes.map((n, i) => (

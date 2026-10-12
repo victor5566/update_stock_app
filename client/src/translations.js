@@ -111,7 +111,7 @@ export const TRANSLATIONS = {
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '【已中止：在取得報價階段停止，未寫入任何變更】' : `【已中止${r.apply ? '，中止前的變更已寫入' : ''}】`),
     monitorSummary: (r, fields) => `上次${r.apply ? '偵測並更新' : '預覽（未寫入）'}（${new Date(r.finishedAt).toLocaleString('zh-TW')}${r.trigger === 'schedule' ? '，排程' : ''}）：檢查 ${r.counts.checked.toLocaleString()} 筆，上市 ${r.counts.listed.toLocaleString()}、下市 ${r.counts.delisted.toLocaleString()}、無法判斷 ${r.counts.unknown.toLocaleString()}。`
       + `欄位變更：${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join('、') || '無'}${r.apply ? `（已更新 ${r.counts.updated} 筆${r.counts.errors ? `，失敗 ${r.counts.errors}` : ''}）` : ''}。`
-      + `公司資料：${r.apply ? `補了 ${r.details.filled}/${r.details.tried} 筆，` : ''}尚缺 ${r.details.missing.toLocaleString()} 筆。CUSIP：${r.apply ? `補了 ${r.cusip.filled}/${r.cusip.tried} 筆，` : ''}尚缺 ${r.cusip.missing.toLocaleString()} 筆。`
+      + `公司資料：${r.apply ? `查了 ${r.details.tried} 筆，補上 ${r.details.filled} 筆、更新 ${r.details.updated || 0} 筆，` : ''}尚缺 ${r.details.missing.toLocaleString()} 筆。CUSIP：${r.apply ? `補了 ${r.cusip.filled}/${r.cusip.tried} 筆，` : ''}尚缺 ${r.cusip.missing.toLocaleString()} 筆。`
       + `${r.listingAvailable ? '' : '（注意：NASDAQ Trader 清單無法下載）'}${r.failedQuotes ? `（注意：${r.failedQuotes} 個代號 Yahoo 查詢失敗，狀態未變更）` : ''}`,
     monitorNext: (time) => `下次排程：${new Date(time).toLocaleString('zh-TW')}`,
     monitorThStatus: '狀態',
@@ -148,6 +148,7 @@ export const TRANSLATIONS = {
       nameDiffers: '名稱不一致',
       nameTaken: '名稱已被同代號另一筆使用',
       otherNote: '其他說明',
+      detailsUpdated: '公司資料更新',
       detailsFilled: '補上公司資料',
       cusipFilled: '補上 CUSIP',
       cusipConflict: 'CUSIP 已被其他股票使用',
@@ -271,7 +272,7 @@ export const TRANSLATIONS = {
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '[Stopped while fetching quotes - nothing was written] ' : `[Stopped${r.apply ? ' - changes made before the stop were written' : ''}] `),
     monitorSummary: (r, fields) => `Last ${r.apply ? 'check & update' : 'preview (nothing written)'} (${new Date(r.finishedAt).toLocaleString('en-US')}${r.trigger === 'schedule' ? ', scheduled' : ''}): checked ${r.counts.checked.toLocaleString()} - listed ${r.counts.listed.toLocaleString()}, delisted ${r.counts.delisted.toLocaleString()}, unknown ${r.counts.unknown.toLocaleString()}. `
       + `Field changes: ${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join(', ') || 'none'}${r.apply ? ` (${r.counts.updated} rows updated${r.counts.errors ? `, ${r.counts.errors} failed` : ''})` : ''}. `
-      + `Company info: ${r.apply ? `filled ${r.details.filled}/${r.details.tried}, ` : ''}${r.details.missing.toLocaleString()} still missing. CUSIP: ${r.apply ? `filled ${r.cusip.filled}/${r.cusip.tried}, ` : ''}${r.cusip.missing.toLocaleString()} still missing.`
+      + `Company info: ${r.apply ? `checked ${r.details.tried}, filled ${r.details.filled}, updated ${r.details.updated || 0}, ` : ''}${r.details.missing.toLocaleString()} still missing. CUSIP: ${r.apply ? `filled ${r.cusip.filled}/${r.cusip.tried}, ` : ''}${r.cusip.missing.toLocaleString()} still missing.`
       + `${r.listingAvailable ? '' : ' (warning: NASDAQ Trader listing unavailable)'}${r.failedQuotes ? ` (warning: ${r.failedQuotes} symbols failed on Yahoo - status left alone)` : ''}`,
     monitorNext: (time) => `Next scheduled run: ${new Date(time).toLocaleString('en-US')}`,
     monitorThStatus: 'Status',
@@ -308,6 +309,7 @@ export const TRANSLATIONS = {
       nameDiffers: 'Name differs',
       nameTaken: 'Name held by another row',
       otherNote: 'Other notes',
+      detailsUpdated: 'Company info updated',
       detailsFilled: 'Company info filled',
       cusipFilled: 'CUSIP filled',
       cusipConflict: 'CUSIP held by another stock',

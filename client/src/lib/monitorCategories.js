@@ -23,6 +23,7 @@ export function describeNote(note, t) {
   return kind === 'otherNote' ? note : t('monitorNotes')[kind](...args);
 }
 
+const DETAIL_FIELDS = new Set(['sector', 'industry', 'companysite', 'description', 'ceo']);
 const hasChange = (field, to) => (item) => item.changes.some((c) => c.field === field && (to === undefined || c.to === to));
 const hasNote = (kind) => (item) => item.notes.some((n) => noteKind(n).kind === kind);
 
@@ -35,6 +36,8 @@ export const MONITOR_CATEGORIES = [
   { key: 'exchange', group: 'changes', tone: 'blue', test: hasChange('exchange') },
   { key: 'category', group: 'changes', tone: 'blue', test: hasChange('category') },
   { key: 'currency', group: 'changes', tone: 'blue', test: hasChange('currency') },
+  // An applying run's company-detail refresh (lib/fillCompanyDetails.js): a stored value replaced.
+  { key: 'detailsUpdated', group: 'changes', tone: 'blue', test: (item) => item.changes.some((c) => DETAIL_FIELDS.has(c.field)) },
   { key: 'recycled', group: 'review', tone: 'amber', test: hasNote('recycled') },
   { key: 'duplicate', group: 'review', tone: 'amber', test: hasNote('duplicate') },
   { key: 'nameDiffers', group: 'review', tone: 'amber', test: hasNote('nameDiffers') },
