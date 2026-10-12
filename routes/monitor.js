@@ -27,12 +27,13 @@ function startRun({ apply, trigger }) {
     shouldStop: () => state.stopRequested,
     detailLimit: Number(process.env.MONITOR_DETAIL_LIMIT) || undefined,
     cusipLimit: Number(process.env.MONITOR_CUSIP_LIMIT) || undefined,
+    cusipRefreshLimit: Number(process.env.MONITOR_CUSIP_REFRESH_LIMIT) || undefined,
     onProgress: (p) => { state.progress = p; },
   })
     .then((report) => {
       state.reports = { ...state.reports, [apply ? 'apply' : 'preview']: { ...report, trigger } };
       const c = report.counts;
-      console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, details filled ${report.details.filled}, cusip filled ${report.cusip.filled}`);
+      console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, details filled ${report.details.filled} / updated ${report.details.updated}, cusip filled ${report.cusip.filled} / updated ${report.cusip.updated}`);
     })
     .catch((err) => {
       state.lastError = err.message;

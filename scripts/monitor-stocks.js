@@ -1,4 +1,4 @@
-// Usage: node scripts/monitor-stocks.js [--apply] [--detail-limit N] [--cusip-limit N] [--list] [SYMBOL ...]
+// Usage: node scripts/monitor-stocks.js [--apply] [--detail-limit N] [--cusip-limit N] [--cusip-refresh-limit N] [--list] [SYMBOL ...]
 // Checks stocks against NASDAQ Trader's listing and Yahoo Finance (lib/stockMonitor.js):
 // listed / delisted status, name, market, OTC category, currency, then fills missing company
 // details and CUSIPs for up to --detail-limit / --cusip-limit trading rows. Never deletes.
@@ -16,7 +16,7 @@ async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
   const list = args.includes('--list');
-  const symbols = args.filter((a, i) => !a.startsWith('--') && !/^--(detail|cusip)-limit$/.test(args[i - 1] || ''));
+  const symbols = args.filter((a, i) => !a.startsWith('--') && !/^--(detail|cusip|cusip-refresh)-limit$/.test(args[i - 1] || ''));
 
   let lastPhase = '';
   const report = await runStockMonitor(pool, {
@@ -24,6 +24,7 @@ async function main() {
     symbols,
     detailLimit: argValue('--detail-limit'),
     cusipLimit: argValue('--cusip-limit'),
+    cusipRefreshLimit: argValue('--cusip-refresh-limit'),
     onProgress: ({ phase, done, total }) => {
       if (phase !== lastPhase || done === total) console.log(`[${phase}] ${done}/${total}`);
       lastPhase = phase;
@@ -34,8 +35,8 @@ async function main() {
   console.log(`\n${apply ? 'APPLIED' : 'PREVIEW (nothing written - pass --apply to write)'}`);
   console.log(`Checked ${counts.checked}: listed ${counts.listed}, delisted ${counts.delisted}, unknown ${counts.unknown}`);
   console.log(`Field changes: ${JSON.stringify(fieldCounts)}${apply ? `; rows updated ${counts.updated}, errors ${counts.errors}` : ''}`);
-  console.log(`Company details: ${details.missing} trading rows missing some; ${apply ? `tried ${details.tried}, filled ${details.filled}` : 'filled only with --apply'}`);
-  console.log(`CUSIP: ${cusip.missing} trading US rows missing; ${apply ? `tried ${cusip.tried}, filled ${cusip.filled}, conflicts ${cusip.conflicts}` : 'filled only with --apply'}`);
+  console.log(`Company details: ${details.missing} trading rows missing some; ${apply ? `tried ${details.tried}, filled ${details.filled}, updated ${details.updated}` : 'filled / updated only with --apply'}`);
+  console.log(`CUSIP: ${cusip.missing} trading US rows missing; ${apply ? `tried ${cusip.tried}, filled ${cusip.filled}, conflicts ${cusip.conflicts}; stored ones re-checked ${cusip.rechecked}, updated ${cusip.updated}` : 'filled / re-checked only with --apply'}`);
   if (!report.listingAvailable) console.log('WARNING: NASDAQ Trader listing unavailable - listed stocks were judged on Yahoo alone.');
   if (report.failedQuotes) console.log(`WARNING: ${report.failedQuotes} symbols failed on Yahoo - their status was left alone.`);
 
