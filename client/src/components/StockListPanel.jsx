@@ -1,10 +1,10 @@
-// Stock list tab: search, market filter, CSV export and server-side paging (the table has
+// Stock list tab: search, market and listed / delisted filters, CSV export and server-side paging (the table has
 // ~79k rows, so only one page is ever loaded).
 import { useT } from '../i18n';
 import { API, PAGE_SIZE, cx } from '../lib/stocks';
 import { Badge, Button, Card, Input, Pagination, Select, StockLink, Table, TD } from './ui';
 
-export default function StockListPanel({ stockPage, loading, search, marketFilter, markets, onSearch, onMarketFilter, onPage }) {
+export default function StockListPanel({ stockPage, loading, search, marketFilter, statusFilter, markets, onSearch, onMarketFilter, onStatusFilter, onPage }) {
   const t = useT();
   const { rows, total, page } = stockPage;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -13,19 +13,25 @@ export default function StockListPanel({ stockPage, loading, search, marketFilte
   function exportCsv() {
     const params = new URLSearchParams();
     if (marketFilter) params.set('market', marketFilter);
+    if (statusFilter) params.set('status', statusFilter);
     if (search.trim()) params.set('q', search.trim());
     window.location.href = `${API}/stocks/export.csv?${params.toString()}`;
   }
 
   return (
     <Card title={t('tabList')}>
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_14rem_auto]">
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_14rem_10rem_auto]">
         <Input type="search" id="search-input" placeholder={t('searchPlaceholder')} value={search} onChange={(e) => onSearch(e.target.value)} />
         {/* A <select>, not a datalist input: once a datalist input held "OTC" the browser only
             suggested values matching "OTC", with no way back to the other markets. */}
         <Select id="market-filter" value={marketFilter} onChange={(e) => onMarketFilter(e.target.value)}>
           <option value="">{t('allMarkets')}</option>
           {markets.map((m) => <option key={m} value={m}>{m}</option>)}
+        </Select>
+        <Select id="status-filter" value={statusFilter} onChange={(e) => onStatusFilter(e.target.value)}>
+          <option value="">{t('allStatuses')}</option>
+          <option value="listed">{t('statusListed')}</option>
+          <option value="delisted">{t('statusDelisted')}</option>
         </Select>
         <Button id="export-csv-btn" onClick={exportCsv}>{t('exportCsvBtn')}</Button>
       </div>
