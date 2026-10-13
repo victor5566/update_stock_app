@@ -53,3 +53,13 @@ test('an applying run lists changed and filled rows, not note-only rows', () => 
   expect(isApplyResult({ ...base, notes: ['name differs: X Corp'] })).toBe(false);
   expect(t('monitorCusipConflict')(conflict.cusipConflict)).toContain('AAPL');
 });
+
+test('a delisted row renamed to free its name for the listed row', () => {
+  const note = 'renamed so the listed row with this symbol (id 124802) can use its name: ADC Therapeutics SA';
+  expect(noteKind(note)).toMatchObject({ kind: 'nameFreed', args: ['124802', 'ADC Therapeutics SA'] });
+  const text = describeNote(note, t);
+  expect(text).toContain('124802');
+  expect(text).toContain('ADC Therapeutics SA');
+  const item = { changes: [{ field: 'company_name', from: 'ADC Therapeutics SA', to: 'ADC Therapeutics SA (old)' }], notes: [note] };
+  expect(MONITOR_CATEGORIES.filter((c) => c.test(item)).map((c) => c.key)).toEqual(['name', 'nameFreed']);
+});

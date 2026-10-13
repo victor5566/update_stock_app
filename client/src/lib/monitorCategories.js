@@ -8,6 +8,8 @@ export const NOTE_PATTERNS = {
   nameDiffers: /^name differs: (.*)$/,
   // the table's unique (stock_symbol, company_name) index: another row already has symbol + new name
   nameTaken: /^name already used by another row with this symbol \(id (\d+)(, delisted)?\): (.*) - nothing changed$/,
+  // a delisted row renamed "<name> (old)" so the listed row with its symbol can take the name
+  nameFreed: /^renamed so the listed row with this symbol \(id (\d+)\) can use its name: (.*)$/,
 };
 
 export function noteKind(note) {
@@ -33,6 +35,7 @@ export const MONITOR_CATEGORIES = [
   { key: 'delist', group: 'changes', tone: 'red', test: hasChange('isdelisted', true) },
   { key: 'revive', group: 'changes', tone: 'green', test: hasChange('isdelisted', false) },
   { key: 'name', group: 'changes', tone: 'blue', test: hasChange('company_name') },
+  { key: 'nameFreed', group: 'changes', tone: 'blue', test: hasNote('nameFreed') },
   { key: 'exchange', group: 'changes', tone: 'blue', test: hasChange('exchange') },
   { key: 'category', group: 'changes', tone: 'blue', test: hasChange('category') },
   { key: 'currency', group: 'changes', tone: 'blue', test: hasChange('currency') },
