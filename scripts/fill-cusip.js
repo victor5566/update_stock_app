@@ -1,7 +1,7 @@
 // Usage: node scripts/fill-cusip.js [SYMBOL ...]
 // Fills in company_profiles.cusips - not available from Yahoo Finance or NASDAQ Trader's listing
 // files at all, so this is the only automated source in this project for that column (see
-// CLAUDE.md). Lookup logic (SEC EDGAR, then quantumonline.com as fallback) lives in
+// CLAUDE.md). Lookup logic (SEC 13G, SEC 13F, then quantumonline.com as fallback) lives in
 // lib/cusipLookup.js, shared with the auto-fill triggered on new manual additions
 // (routes/stocks.js).
 //
@@ -9,7 +9,7 @@
 // QOL_DELAY_MS (default 500ms) apart - quantumonline.com is a small site, not an API.
 require('dotenv').config();
 const pool = require('../db');
-const { lookupCusip, findCusipConflict, hasSecContact } = require('../lib/cusipLookup');
+const { lookupCusip, checkCusipOwner, releaseFromHolder, hasSecContact } = require('../lib/cusipLookup');
 const { loadNasdaqTraderListing } = require('../lib/nasdaqTrader');
 const { TABLE, ID } = require('../lib/stockTable');
 
@@ -30,9 +30,9 @@ async function main() {
   // Empty strings count as missing too (the table holds both). Delisted rows are skipped
   // unless named explicitly.
   const { rows: stocks } = symbols.length
-    ? await pool.query(`SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE} WHERE upper(stock_symbol) = ANY($1)`, [symbols])
+    ? await pool.query(`SELECT ${ID} AS id, stock_symbol, company_name, exchange FROM ${TABLE} WHERE upper(stock_symbol) = ANY($1)`, [symbols])
     : await pool.query(
-        `SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE}
+        `SELECT ${ID} AS id, stock_symbol, company_name, exchange FROM ${TABLE}
          WHERE NULLIF(cusips, '') IS NULL AND NOT coalesce(isdelisted, false) ORDER BY ${ID}`
       );
 
@@ -52,23 +52,25 @@ async function main() {
     console.log(`WARNING: NASDAQ Trader listing unavailable (${err.message}) - non-common securities only recognized by name.\n`);
   }
 
-  console.log(`Looking up CUSIP for ${stocks.length} stock(s) (SEC EDGAR, then quantumonline.com)...`);
+  console.log(`Looking up CUSIP for ${stocks.length} stock(s) (SEC 13G, SEC 13F, then quantumonline.com)...`);
 
   let filled = 0;
   for (let i = 0; i < stocks.length; i++) {
     const stock = stocks[i];
-    const { cusip, source } = await lookupCusip(stock.stock_symbol, {
+    const { cusip, source, owner, reasons } = await lookupCusip(stock.stock_symbol, {
       companyName: stock.company_name,
       listing,
+      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
       onSourceError: (src, err) => console.log(`  (${src} lookup failed for ${stock.stock_symbol}: ${err.message})`),
     });
-    const conflict = cusip && await findCusipConflict(pool, cusip, { stockId: stock.id });
+    const freed = cusip ? await releaseFromHolder(pool, owner, cusip) : null;
 
     if (!cusip) {
-      console.log(`SKIP ${stock.stock_symbol}: not found on either source`);
-    } else if (conflict) {
-      console.log(`SKIP ${stock.stock_symbol}: ${cusip} (${source}) already belongs to ${conflict.stock_symbol} (${conflict.company_name})`);
+      console.log(`SKIP ${stock.stock_symbol}: not found (${reasons.map((r) => `${r.source}: ${r.code}${r.detail ? ` ${r.detail}` : ''}`).join('; ')})`);
+    } else if (!freed.ok) {
+      console.log(`SKIP ${stock.stock_symbol}: ${cusip} (${source}) already belongs to ${owner.holder.stock_symbol} (${owner.holder.company_name}), which couldn't be verified`);
     } else {
+      if (freed.fixed) console.log(`FIXED ${freed.fixed.stock_symbol}: ${freed.fixed.from} -> ${freed.fixed.to} (${cusip} is ${stock.stock_symbol}'s)`);
       await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [cusip, stock.id]);
       console.log(`FILLED ${stock.stock_symbol}: ${cusip} (${source})`);
       filled++;
