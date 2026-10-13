@@ -26,13 +26,14 @@ export default function HomePage() {
   const [suggestions, setSuggestions] = useState([]);
   const [search, setSearch] = useState('');
   const [marketFilter, setMarketFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // '' (all) | 'listed' | 'delisted'
   // The list page shown: { rows, total, page, pageSize } from GET /api/stocks.
   const [stockPage, setStockPage] = useState({ rows: [], total: 0, page: 1, pageSize: PAGE_SIZE });
   const [loading, setLoading] = useState(true);
 
   // Latest filters/page for fetches started from timers and callbacks.
   const listState = useRef({});
-  listState.current = { search, marketFilter, page: stockPage.page };
+  listState.current = { search, marketFilter, statusFilter, page: stockPage.page };
   const requestSeq = useRef(0);
   const searchTimer = useRef(null);
   const suggestTimer = useRef(null);
@@ -55,6 +56,7 @@ export default function HomePage() {
     const f = { ...listState.current, ...overrides };
     const params = new URLSearchParams();
     if (f.marketFilter) params.set('market', f.marketFilter);
+    if (f.statusFilter) params.set('status', f.statusFilter);
     if (f.search.trim()) params.set('q', f.search.trim());
     params.set('page', page || (keepPage ? f.page : 1));
     params.set('pageSize', PAGE_SIZE);
@@ -162,9 +164,11 @@ export default function HomePage() {
             loading={loading}
             search={search}
             marketFilter={marketFilter}
+            statusFilter={statusFilter}
             markets={markets}
             onSearch={handleSearch}
             onMarketFilter={(value) => { setMarketFilter(value); fetchStocks({ marketFilter: value }); }}
+            onStatusFilter={(value) => { setStatusFilter(value); fetchStocks({ statusFilter: value }); }}
             onPage={(page) => fetchStocks({ page })}
           />
         ))}

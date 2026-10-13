@@ -231,9 +231,13 @@ function extractDetailFields(body) {
 
 // WHERE clause for the stock list's filters (?market=&q=). Shared by the list and its CSV
 // export so the export is always exactly what the list shows.
-function buildStockFilter({ market, q }) {
+function buildStockFilter({ market, q, status }) {
   const conditions = [];
   const params = [];
+
+  // status=listed / delisted (the list's status filter); isdelisted is nullable - NULL = listed.
+  if (status === 'listed') conditions.push('NOT coalesce(isdelisted, false)');
+  if (status === 'delisted') conditions.push('coalesce(isdelisted, false)');
 
   if (market) {
     params.push(market);
@@ -247,7 +251,7 @@ function buildStockFilter({ market, q }) {
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
 }
 
-// GET /api/stocks/export.csv?market=OTC&q=bank - the stock list's "Export CSV" button.
+// GET /api/stocks/export.csv?market=OTC&q=bank&status=listed - the stock list's "Export CSV" button.
 // All columns (lib/stockCsv.js), UTF-8 with a BOM so Excel shows "Latécoère" correctly,
 // downloaded as e.g. stocks_OTC_bank_2026-09-30.csv.
 router.get('/export.csv', async (req, res, next) => {
@@ -257,7 +261,8 @@ router.get('/export.csv', async (req, res, next) => {
       `SELECT ${EXPORT_COLUMNS.join(', ')} FROM ${TABLE} ${where} ORDER BY stock_symbol ASC, ${ID} ASC`,
       params
     );
-    const nameParts = ['stocks', req.query.market || 'all', req.query.q, new Date().toISOString().slice(0, 10)]
+    const status = ['listed', 'delisted'].includes(req.query.status) ? req.query.status : null;
+    const nameParts = ['stocks', req.query.market || 'all', status, req.query.q, new Date().toISOString().slice(0, 10)]
       .filter(Boolean)
       .map((part) => String(part).replace(/[^A-Za-z0-9.-]+/g, '_'));
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
