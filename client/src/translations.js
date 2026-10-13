@@ -66,6 +66,12 @@ export const TRANSLATIONS = {
       no_13g: () => '尚無關於此公司的 13G 持股申報（新上市公司，或沒有機構持股超過 5%）',
       unusable_13g: () => '有 13G 申報，但申報的發行人名稱或 CUSIP 無法確認',
       conflicting_13g: () => '13G 申報中的 CUSIP 彼此不一致，無法判斷哪個正確',
+      no_13f: () => '近期的 13F 機構持股報告中找不到這家公司的普通股',
+      ambiguous_13f: (detail) => `13F 持股報告中有多個可能的 CUSIP${detail ? `（${detail}）` : ''}，無法判斷是哪一個`,
+      belongs_to_other: (detail) => {
+        const [cusip, symbol] = String(detail || '').split(' ');
+        return `查到的 ${cusip} 經 SEC 確認是 ${symbol} 的 CUSIP，不是這檔股票的，因此不採用`;
+      },
       not_found: () => '查無此代碼',
       name_mismatch: (detail) => `頁面上的證券名稱${detail ? `（${detail}）` : ''}與公司名稱不符，可能是此代碼前一家公司的資料`,
       no_cusip_on_page: () => '頁面上沒有 CUSIP',
@@ -228,6 +234,12 @@ export const TRANSLATIONS = {
       no_13g: () => 'no 13G ownership filing about this company yet (newly listed, or no institution holds over 5%)',
       unusable_13g: () => "13G filings exist, but their issuer name or CUSIP couldn't be confirmed",
       conflicting_13g: () => "the 13G filings disagree on the CUSIP, so it can't be told which is right",
+      no_13f: () => "this company's common stock isn't in recent 13F institutional holdings reports",
+      ambiguous_13f: (detail) => `13F holdings reports show several possible CUSIPs${detail ? ` (${detail})` : ''}, so it can't be told which is right`,
+      belongs_to_other: (detail) => {
+        const [cusip, symbol] = String(detail || '').split(' ');
+        return `the ${cusip} found is ${symbol}'s CUSIP (confirmed by SEC), not this stock's, so it wasn't used`;
+      },
       not_found: () => 'symbol not found',
       name_mismatch: (detail) => `the security name on the page${detail ? ` (${detail})` : ''} doesn't match the company - probably the symbol's previous owner`,
       no_cusip_on_page: () => 'the page has no CUSIP',

@@ -3,7 +3,7 @@ const pool = require('../db');
 const { applyStockUpdate } = require('../lib/applyStockUpdate');
 const { isValidCusip } = require('../lib/validateCusip');
 const { fillCompanyDetails } = require('../lib/fillCompanyDetails');
-const { lookupCusip, findCusipConflict } = require('../lib/cusipLookup');
+const { lookupCusip, checkCusipOwner, releaseFromHolder } = require('../lib/cusipLookup');
 const { lookupStock, YahooLookupError, symbolsEquivalent } = require('../lib/yahoo');
 const { getCachedListing } = require('../lib/nasdaqTrader');
 const { cleanSecurityName } = require('../lib/cleanSecurityName');
@@ -124,6 +124,8 @@ async function autoFillOnce(stock, todo) {
       // ticker) can still show the previous issuer - the name check in lib/cusipLookup.js.
       companyName: stock.company_name,
       listing: listing || undefined,
+      // Another stock's verified CUSIP is dropped; a holder whose own is different is corrected below.
+      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
     }) : Promise.resolve(null),
   ]);
@@ -148,12 +150,13 @@ async function autoFillOnce(stock, todo) {
       cusip = { status: 'error', message: cusipResult.reason.message };
       console.error(`[auto-fill] ${stock.stock_symbol}: cusip lookup failed - ${cusip.message}`);
     } else {
-      const { cusip: found, source, reasons } = cusipResult.value;
-      const conflict = found && await findCusipConflict(pool, found, { stockId: stock.id });
-      if (conflict) {
-        cusip = { status: 'conflict', cusip: found, source, conflict_symbol: conflict.stock_symbol };
-        console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${conflict.stock_symbol} - not written`);
+      const { cusip: found, source, reasons, owner } = cusipResult.value;
+      const freed = found ? await releaseFromHolder(pool, owner, found) : null;
+      if (freed && !freed.ok) {
+        cusip = { status: 'conflict', cusip: found, source, conflict_symbol: owner.holder.stock_symbol };
+        console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${owner.holder.stock_symbol} - not written`);
       } else if (found) {
+        if (freed.fixed) console.log(`[auto-fill] ${freed.fixed.stock_symbol}: cusip corrected ${freed.fixed.from} -> ${freed.fixed.to} (${found} is ${stock.stock_symbol}'s)`);
         await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [found, stock.id]);
         cusip = { status: 'filled', cusip: found, source };
         console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);
