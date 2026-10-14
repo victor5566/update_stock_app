@@ -6,7 +6,7 @@
 
 一個股票代碼維護系統：後端是純 Node.js/Express（JSON API），前端是 `client/` 裡的 **React（create-react-app）+ Tailwind CSS**（由 `npm run build` 建置到 `client/build`，再由 Express 提供），資料存在 PostgreSQL。用途是維護股票代碼／公司名稱／交易市場清單——瀏覽、手動新增與修改、批次匯入、自動補公司資料與 CUSIP、以及自動偵測上市／下市狀態——不是交易或股價系統。
 
-**資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle_test` 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql`）。
+**資料放在別人的資料表裡。** 從 2026-10-06 起，系統讀寫的是遠端資料庫 `waffle`（2026-10-15 以前是 `waffle_test`） 裡既有的共用資料表 `test.company_profiles`（約 7.9 萬筆，涵蓋所有市場而非只有美股；約 4.4 萬筆標為下市）。使用者的要求：**絕不更改它的欄位，只能 SELECT / INSERT / UPDATE，不能 DELETE。** 登入帳號（`victor`）在任何 schema 都不能建表（`test`、`public` 都沒有 CREATE 權限），所以系統沒有自己的資料表。系統原本使用 WSL 本機資料庫，有 `stocks` 表和歷史紀錄、候選名單、刪除紀錄等表；那些功能（刪除、刪除紀錄、改名／代號歷史、手動新增紀錄、重新檢測與移除候選）在這次切換時移除了——若要恢復，請看切換前的 git 歷史（需要 DBA 建表；DDL 在 `sql/ddl_test_schema.sql`）。
 
 ## 常用指令
 
