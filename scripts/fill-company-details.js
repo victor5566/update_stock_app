@@ -25,9 +25,9 @@ async function main() {
   // Empty strings count as missing too (the table holds both). Delisted rows are skipped
   // unless named explicitly.
   const { rows: stocks } = symbols.length
-    ? await pool.query(`SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE} WHERE upper(stock_symbol) = ANY($1)`, [symbols])
+    ? await pool.query(`SELECT ${ID} AS id, stock_symbol, company_name, exchange FROM ${TABLE} WHERE upper(stock_symbol) = ANY($1)`, [symbols])
     : await pool.query(
-        `SELECT ${ID} AS id, stock_symbol, company_name FROM ${TABLE}
+        `SELECT ${ID} AS id, stock_symbol, company_name, exchange FROM ${TABLE}
          WHERE NOT coalesce(isdelisted, false)
            AND (NULLIF(sector, '') IS NULL OR NULLIF(industry, '') IS NULL OR NULLIF(currency, '') IS NULL
              OR NULLIF(company_location, '') IS NULL OR NULLIF(companysite, '') IS NULL
