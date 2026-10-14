@@ -25,7 +25,7 @@ export function describeNote(note, t) {
   return kind === 'otherNote' ? note : t('monitorNotes')[kind](...args);
 }
 
-const DETAIL_FIELDS = new Set(['sector', 'industry', 'companysite', 'description', 'ceo']);
+const DETAIL_FIELDS = new Set(['sector', 'industry', 'company_location', 'companysite', 'description', 'ceo']);
 const hasChange = (field, to) => (item) => item.changes.some((c) => c.field === field && (to === undefined || c.to === to));
 const hasNote = (kind) => (item) => item.notes.some((n) => noteKind(n).kind === kind);
 
