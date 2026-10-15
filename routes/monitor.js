@@ -31,7 +31,7 @@ function startRun({ apply, trigger }) {
     .then((report) => {
       state.reports = { ...state.reports, [apply ? 'apply' : 'preview']: { ...report, trigger } };
       const c = report.counts;
-      console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, details filled ${report.details.filled} / updated ${report.details.updated}, cusip filled ${report.cusip.filled} / updated ${report.cusip.updated}`);
+      console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, cusip tried ${report.cusip.tried} / filled ${report.cusip.filled} / conflicts ${report.cusip.conflicts} / errors ${report.cusip.errors}, ${report.cusip.missing} still missing`);
     })
     .catch((err) => {
       state.lastError = err.message;
