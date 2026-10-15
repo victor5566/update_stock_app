@@ -4,3 +4,4 @@ exports/
 ~$*
 deploy/deploy.conf
 client/build/
+.claude/settings.local.json
