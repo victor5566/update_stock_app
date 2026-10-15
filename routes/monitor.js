@@ -27,7 +27,6 @@ function startRun({ apply, trigger }) {
     shouldStop: () => state.stopRequested,
     detailLimit: Number(process.env.MONITOR_DETAIL_LIMIT) || undefined,
     cusipLimit: Number(process.env.MONITOR_CUSIP_LIMIT) || undefined,
-    cusipRefreshLimit: Number(process.env.MONITOR_CUSIP_REFRESH_LIMIT) || undefined,
     onProgress: (p) => { state.progress = p; },
   })
     .then((report) => {
