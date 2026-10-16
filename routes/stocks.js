@@ -125,7 +125,7 @@ async function autoFillOnce(stock, todo) {
       companyName: stock.company_name,
       listing: listing || undefined,
       // Another stock's verified CUSIP is dropped; a holder whose own is different is corrected below.
-      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
+      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, symbol: stock.stock_symbol, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
       onSourceError: (src, err) => console.error(`[auto-fill] ${stock.stock_symbol}: ${src} lookup failed - ${err.message}`),
     }) : Promise.resolve(null),
   ]);
@@ -157,6 +157,7 @@ async function autoFillOnce(stock, todo) {
         console.error(`[auto-fill] ${stock.stock_symbol}: cusip ${found} (${source}) already belongs to ${owner.holder.stock_symbol} - not written`);
       } else if (found) {
         if (freed.fixed) console.log(`[auto-fill] ${freed.fixed.stock_symbol}: cusip corrected ${freed.fixed.from} -> ${freed.fixed.to} (${found} is ${stock.stock_symbol}'s)`);
+        if (freed.delisted) console.log(`[auto-fill] ${freed.delisted.stock_symbol} (id ${freed.delisted.id}): old ticker of ${stock.stock_symbol} - marked delisted, ${found} now on ${stock.stock_symbol}`);
         await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [found, stock.id]);
         cusip = { status: 'filled', cusip: found, source };
         console.log(`[auto-fill] ${stock.stock_symbol}: cusip filled (${source})`);

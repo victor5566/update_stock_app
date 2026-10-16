@@ -60,7 +60,7 @@ async function main() {
     const { cusip, source, owner, reasons } = await lookupCusip(stock.stock_symbol, {
       companyName: stock.company_name,
       listing,
-      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
+      checkOwner: (c) => checkCusipOwner(pool, c, { stockId: stock.id, symbol: stock.stock_symbol, listing: listing || undefined, companyName: stock.company_name, exchange: stock.exchange }),
       onSourceError: (src, err) => console.log(`  (${src} lookup failed for ${stock.stock_symbol}: ${err.message})`),
     });
     const freed = cusip ? await releaseFromHolder(pool, owner, cusip) : null;
@@ -71,6 +71,7 @@ async function main() {
       console.log(`SKIP ${stock.stock_symbol}: ${cusip} (${source}) already belongs to ${owner.holder.stock_symbol} (${owner.holder.company_name}), which couldn't be verified`);
     } else {
       if (freed.fixed) console.log(`FIXED ${freed.fixed.stock_symbol}: ${freed.fixed.from} -> ${freed.fixed.to} (${cusip} is ${stock.stock_symbol}'s)`);
+      if (freed.delisted) console.log(`DELISTED ${freed.delisted.stock_symbol} (id ${freed.delisted.id}): old ticker of ${stock.stock_symbol}, same CUSIP ${cusip}`);
       await pool.query(`UPDATE ${TABLE} SET cusips = $1, updated_at = now() WHERE ${ID} = $2`, [cusip, stock.id]);
       console.log(`FILLED ${stock.stock_symbol}: ${cusip} (${source})`);
       filled++;

@@ -10,6 +10,11 @@ export const NOTE_PATTERNS = {
   nameTaken: /^name already used by another row with this symbol \(id (\d+)(, delisted)?\): (.*) - nothing changed$/,
   // a delisted row renamed "<name> (old)" so the listed row with its symbol can take the name
   nameFreed: /^renamed so the listed row with this symbol \(id (\d+)\) can use its name: (.*)$/,
+  // the same security's old ticker (MIMI -> AXNX): marked delisted so its CUSIP could go to the new row
+  tickerChanged: /^symbol changed to (\S+) \(id (\d+)\) - this old row marked delisted, CUSIP (\S+) now on the new row$/,
+  // a rename / ticker change seen from an old row without a CUSIP: old row delisted (name kept), new row added
+  replacedBy: /^replaced by (\S+) "(.*)" \((renamed|new ticker)\) - this row marked delisted \(name kept\); (a new row is added for it|\S+ already has a row)$/,
+  newRowFor: /^new row replacing id (\d+) \((\S+) "(.*)"\)$/,
 };
 
 export function noteKind(note) {
@@ -36,6 +41,9 @@ export const MONITOR_CATEGORIES = [
   { key: 'revive', group: 'changes', tone: 'green', test: hasChange('isdelisted', false) },
   { key: 'name', group: 'changes', tone: 'blue', test: hasChange('company_name') },
   { key: 'nameFreed', group: 'changes', tone: 'blue', test: hasNote('nameFreed') },
+  { key: 'tickerChanged', group: 'changes', tone: 'blue', test: hasNote('tickerChanged') },
+  { key: 'replacedBy', group: 'changes', tone: 'blue', test: hasNote('replacedBy') },
+  { key: 'newRow', group: 'changes', tone: 'green', test: hasNote('newRowFor') },
   { key: 'exchange', group: 'changes', tone: 'blue', test: hasChange('exchange') },
   { key: 'category', group: 'changes', tone: 'blue', test: hasChange('category') },
   { key: 'currency', group: 'changes', tone: 'blue', test: hasChange('currency') },
