@@ -34,6 +34,7 @@ async function main() {
   console.log(`\n${apply ? 'APPLIED' : 'PREVIEW (nothing written - pass --apply to write)'}`);
   console.log(`Checked ${counts.checked} rows without a CUSIP: listed ${counts.listed}, delisted ${counts.delisted}, unknown ${counts.unknown}`);
   console.log(`Field changes: ${JSON.stringify(fieldCounts)}${apply ? `; rows updated ${counts.updated}, errors ${counts.errors}` : ''}`);
+  if (counts.added) console.log(`New rows for renamed / moved stocks: ${counts.added}${apply ? ' added' : ' would be added'} (their old rows marked delisted, names kept)`);
   console.log(`CUSIP: ${cusip.missing} trading US rows missing; ${apply ? `tried ${cusip.tried}, filled ${cusip.filled}, conflicts ${cusip.conflicts}, errors ${cusip.errors}` : 'looked up only with --apply'}`);
   if (!report.listingAvailable) console.log('WARNING: NASDAQ Trader listing unavailable - listed stocks were judged on Yahoo alone.');
   if (report.failedQuotes) console.log(`WARNING: ${report.failedQuotes} symbols failed on Yahoo - their status was left alone.`);

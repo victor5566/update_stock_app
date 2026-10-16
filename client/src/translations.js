@@ -113,6 +113,8 @@ export const TRANSLATIONS = {
     monitorPreviewBtn: '預覽（不寫入）',
     monitorApplyBtn: '偵測並更新',
     monitorStopBtn: '中止',
+    monitorExportBtn: (n) => `匯出 CSV（新舊代號與 CUSIP，${n.toLocaleString()} 筆）`,
+    monitorExportHint: 'CUSIP 已被其他股票使用、更名或換代號的股票：舊代號與名稱、新代號與名稱、CUSIP',
     monitorConfirmApply: '將檢查所有沒有 CUSIP 的股票並直接寫入資料庫（不會刪除任何股票），查 CUSIP 每筆需數秒，可能要一段時間。確定要執行嗎？',
     monitorStarting: '啟動中…',
     monitorStopping: '正在中止，會在目前這筆處理完後停止…',
@@ -122,6 +124,7 @@ export const TRANSLATIONS = {
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '【已中止：在取得報價階段停止，未寫入任何變更】' : `【已中止${r.apply ? '，中止前的變更已寫入' : ''}】`),
     monitorSummary: (r, fields) => `上次${r.apply ? '偵測並更新' : '預覽（未寫入）'}（${new Date(r.finishedAt).toLocaleString('zh-TW')}${r.trigger === 'schedule' ? '，排程' : ''}）：檢查 ${r.counts.checked.toLocaleString()} 筆沒有 CUSIP 的股票，上市 ${r.counts.listed.toLocaleString()}、下市 ${r.counts.delisted.toLocaleString()}、無法判斷 ${r.counts.unknown.toLocaleString()}。`
       + `欄位變更：${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join('、') || '無'}${r.apply ? `（已更新 ${r.counts.updated} 筆${r.counts.errors ? `，失敗 ${r.counts.errors}` : ''}）` : ''}。`
+      + `${r.counts.added ? `更名／換代號：${r.apply ? '新增' : '將新增'} ${r.counts.added} 筆新股票（舊資料標為下市）。` : ''}`
       + `CUSIP：${r.apply ? `補了 ${r.cusip.filled}/${r.cusip.tried} 筆，` : ''}尚缺 ${r.cusip.missing.toLocaleString()} 筆。`
       + `${r.listingAvailable ? '' : '（注意：NASDAQ Trader 清單無法下載）'}${r.failedQuotes ? `（注意：${r.failedQuotes} 個代號 Yahoo 查詢失敗，狀態未變更）` : ''}`,
     monitorNext: (time) => `下次排程：${new Date(time).toLocaleString('zh-TW')}`,
@@ -159,6 +162,9 @@ export const TRANSLATIONS = {
       nameDiffers: '名稱不一致',
       nameTaken: '名稱已被同代號另一筆使用',
       nameFreed: '下市資料改名（讓出名稱）',
+      tickerChanged: '代號已更改（舊代號標為下市）',
+      replacedBy: '更名／換代號（舊資料標為下市）',
+      newRow: '新增的股票',
       otherNote: '其他說明',
       detailsUpdated: '公司資料更新',
       cusipUpdated: 'CUSIP 更新',
@@ -173,6 +179,9 @@ export const TRANSLATIONS = {
       nameDiffers: (name) => `資料來源的名稱不同：${name}（未自動更正，請人工確認）`,
       nameFreed: (id, name) => `這筆已下市資料原名「${name}」，改名加上「(old)」，讓同代號的上市資料（id ${id}）可以使用這個名稱（資料表不允許代號與名稱都相同）`,
       nameTaken: (id, delisted, name) => `應改名為「${name}」，但同代號的另一筆${delisted ? '已下市' : ''}資料（id ${id}）已經用這個名稱（資料表不允許代號與名稱都相同），這筆暫不做任何更動，請人工確認`,
+      tickerChanged: (symbol, id, cusip) => `這檔證券已改用新代號 ${symbol}（id ${id}）：這筆舊代號的資料先標為下市，CUSIP ${cusip} 再寫到新代號那筆`,
+      replacedBy: (symbol, name, kind, rest) => `${kind === 'renamed' ? '公司已更名' : '已改用新代號'}為 ${symbol}「${name}」：這筆舊資料標為下市，名稱不變；${rest === 'a new row is added for it' ? '另外新增一筆新的股票' : `${symbol} 已經有資料，不另外新增`}`,
+      newRowFor: (id, symbol, name) => `新增的股票，取代 id ${id}（${symbol}「${name}」，已更名或換代號，已標為下市）`,
     },
   },
   en: {
@@ -288,6 +297,8 @@ export const TRANSLATIONS = {
     monitorPreviewBtn: 'Preview (no writes)',
     monitorApplyBtn: 'Check & Update',
     monitorStopBtn: 'Stop',
+    monitorExportBtn: (n) => `Export CSV (old / new symbols and CUSIP, ${n.toLocaleString()} rows)`,
+    monitorExportHint: 'Stocks whose CUSIP is held by another stock, or that were renamed or moved to a new ticker: old symbol and name, new symbol and name, CUSIP',
     monitorConfirmApply: 'This checks every stock without a CUSIP and writes changes to the database (nothing is deleted). Each CUSIP lookup takes a few seconds, so it can take a while. Continue?',
     monitorStarting: 'Starting…',
     monitorStopping: 'Stopping after the current row…',
@@ -297,6 +308,7 @@ export const TRANSLATIONS = {
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '[Stopped while fetching quotes - nothing was written] ' : `[Stopped${r.apply ? ' - changes made before the stop were written' : ''}] `),
     monitorSummary: (r, fields) => `Last ${r.apply ? 'check & update' : 'preview (nothing written)'} (${new Date(r.finishedAt).toLocaleString('en-US')}${r.trigger === 'schedule' ? ', scheduled' : ''}): checked ${r.counts.checked.toLocaleString()} stocks without a CUSIP - listed ${r.counts.listed.toLocaleString()}, delisted ${r.counts.delisted.toLocaleString()}, unknown ${r.counts.unknown.toLocaleString()}. `
       + `Field changes: ${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join(', ') || 'none'}${r.apply ? ` (${r.counts.updated} rows updated${r.counts.errors ? `, ${r.counts.errors} failed` : ''})` : ''}. `
+      + `${r.counts.added ? `Renamed / new ticker: ${r.counts.added} new stock${r.counts.added === 1 ? '' : 's'} ${r.apply ? 'added' : 'to add'} (old rows marked delisted). ` : ''}`
       + `CUSIP: ${r.apply ? `filled ${r.cusip.filled}/${r.cusip.tried}, ` : ''}${r.cusip.missing.toLocaleString()} still missing.`
       + `${r.listingAvailable ? '' : ' (warning: NASDAQ Trader listing unavailable)'}${r.failedQuotes ? ` (warning: ${r.failedQuotes} symbols failed on Yahoo - status left alone)` : ''}`,
     monitorNext: (time) => `Next scheduled run: ${new Date(time).toLocaleString('en-US')}`,
@@ -334,6 +346,9 @@ export const TRANSLATIONS = {
       nameDiffers: 'Name differs',
       nameTaken: 'Name held by another row',
       nameFreed: 'Delisted row renamed (name freed)',
+      tickerChanged: 'Symbol changed (old ticker delisted)',
+      replacedBy: 'Renamed / new ticker (old row delisted)',
+      newRow: 'New stock added',
       otherNote: 'Other notes',
       detailsUpdated: 'Company info updated',
       cusipUpdated: 'CUSIP updated',
@@ -348,6 +363,9 @@ export const TRANSLATIONS = {
       nameDiffers: (name) => `The sources give a different name: ${name} (not changed automatically - please check)`,
       nameFreed: (id, name) => `This delisted row was named "${name}"; "(old)" was added so the listed row with this symbol (id ${id}) can use that name (the table doesn't allow two rows with the same symbol and name)`,
       nameTaken: (id, delisted, name) => `Should be renamed to "${name}", but another${delisted ? ' delisted' : ''} row with this symbol (id ${id}) already has that name (the table doesn't allow two rows with the same symbol and name) - nothing changed on this row, please check`,
+      tickerChanged: (symbol, id, cusip) => `This security now trades as ${symbol} (id ${id}): this old-ticker row was marked delisted first, then CUSIP ${cusip} was written to the new row`,
+      replacedBy: (symbol, name, kind, rest) => `${kind === 'renamed' ? 'The company was renamed' : 'It now trades under a new ticker'}: ${symbol} "${name}". This old row is marked delisted with its name unchanged; ${rest === 'a new row is added for it' ? 'a new stock is added for it' : `${symbol} already has a row, so none is added`}`,
+      newRowFor: (id, symbol, name) => `New stock, replacing id ${id} (${symbol} "${name}", renamed or moved to a new ticker - marked delisted)`,
     },
   },
 };

@@ -75,6 +75,38 @@ router.get('/report', (req, res) => {
   res.json(report ? report.items : []);
 });
 
+// GET /api/monitor/export.csv?mode=preview|apply - the report's rows that pair an old and a new
+// stock (the user, 2026-10-16: only old symbol + name, new symbol + name and the CUSIP):
+//   - a CUSIP found for a row but already held by another live row (BRTM found G1535G125, which
+//     BRTMU holds): old = the holder, new = the row it was found for;
+//   - a ticker change found through the CUSIP (MIMI -> AXNX: old row delisted, CUSIP written to
+//     the new one), and a rename / ticker change seen from an old row without a CUSIP (old row
+//     delisted, a new row added - its CUSIP if one was found).
+// UTF-8 with a BOM so Excel shows accented names. The reports are in-process, so a server restart
+// empties it.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+function oldNewCusipCsv(items) {
+  const lines = [['old_symbol', 'old_name', 'new_symbol', 'new_name', 'cusip']];
+  for (const item of items || []) {
+    const c = item.cusipConflict;
+    if (c) lines.push([c.stock_symbol, c.company_name, item.stock_symbol, item.company_name, c.cusip]);
+    if (item.movedTo) lines.push([item.stock_symbol, item.company_name, item.movedTo.stock_symbol, item.movedTo.company_name, item.movedTo.cusip]);
+    if (item.replacedBy) lines.push([item.stock_symbol, item.company_name, item.replacedBy.stock_symbol, item.replacedBy.company_name, item.replacedBy.cusip]);
+  }
+  return `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`;
+}
+router.get('/export.csv', (req, res) => {
+  const mode = req.query.mode === 'apply' ? 'apply' : 'preview';
+  const report = state.reports[mode];
+  const day = (report && report.finishedAt ? new Date(report.finishedAt) : new Date()).toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="monitor-${mode}-old-new-cusip-${day}.csv"`);
+  res.send(oldNewCusipCsv(report && report.items));
+});
+
 // MONITOR_DAILY_AT=HH:MM in .env runs an applying check every day at that local time.
 // Unset = no schedule (the buttons and scripts/monitor-stocks.js still work).
 function scheduleDaily() {
@@ -94,3 +126,4 @@ function scheduleDaily() {
 
 module.exports = router;
 module.exports.scheduleDaily = scheduleDaily;
+module.exports.oldNewCusipCsv = oldNewCusipCsv;

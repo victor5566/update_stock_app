@@ -100,9 +100,18 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
     setPage(1);
   };
   const detailNames = (fields) => fields.map((f) => (DETAIL_LABEL[f] ? t(DETAIL_LABEL[f]) : f));
+  // Rows the CSV export lists (old / new symbol + name, CUSIP) - see GET /api/monitor/export.csv.
+  const pairCount = items.reduce((n, it) => n + (it.cusipConflict ? 1 : 0) + (it.movedTo ? 1 : 0) + (it.replacedBy ? 1 : 0), 0);
 
   return (
     <div id={`monitor-report-${view}`} className={hidden ? 'hidden' : ''}>
+      {pairCount > 0 && (
+        <div className="mb-3 flex justify-end">
+          <Button id={`monitor-export-${view}`} onClick={() => { window.location.href = `${API}/monitor/export.csv?mode=${view}`; }} title={t('monitorExportHint')}>
+            {t('monitorExportBtn')(pairCount)}
+          </Button>
+        </div>
+      )}
       {items.length > 0 && <CategoryFilter items={items} category={category} onPick={pickCategory} view={view} />}
       <Table id={`monitor-table-${view}`} head={[t('labelSymbol'), t('labelCompany'), t('monitorThStatus'), t('monitorThChanges')]}>
         {shown.slice(first, first + PAGE_SIZE).map((item) => {
@@ -119,7 +128,7 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
             ...(item.fillError ? [<span key="fe" className="text-red-600 dark:text-red-400">{t('monitorFillError')(item.fillError.part, item.fillError.message)}</span>] : []),
           ];
           return (
-            <tr key={item.id}>
+            <tr key={item.id ?? `new-${item.stock_symbol}-${item.company_name}`}>
               <td className={TD}><StockLink symbol={item.stock_symbol} id={item.id} /></td>
               <td className={TD}>{item.company_name}</td>
               <td className={TD}><Badge tone={STATUS_BADGE[item.status] || 'gray'} title={item.reason}>{t('monitorStatus')[item.status] || item.status}</Badge></td>
