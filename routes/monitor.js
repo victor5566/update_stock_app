@@ -76,7 +76,7 @@ router.get('/report', (req, res) => {
 });
 
 // GET /api/monitor/export.csv?mode=preview|apply - the report's rows that pair an old and a new
-// stock (the user, 2026-10-16: only old symbol + name, new symbol + name and the CUSIP):
+// stock (the user, 2026-10-16: only old id + symbol + name, new id + symbol + name and the CUSIP):
 //   - a CUSIP found for a row but already held by another live row (BRTM found G1535G125, which
 //     BRTMU holds): old = the holder, new = the row it was found for;
 //   - a ticker change found through the CUSIP (MIMI -> AXNX: old row delisted, CUSIP written to
@@ -89,12 +89,15 @@ const csvCell = (v) => {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 function oldNewCusipCsv(items) {
-  const lines = [['old_symbol', 'old_name', 'new_symbol', 'new_name', 'cusip']];
+  // ids too (the user, 2026-10-16) - symbols aren't unique; a preview's new row has no id yet.
+  const lines = [['old_id', 'old_symbol', 'old_name', 'new_id', 'new_symbol', 'new_name', 'cusip']];
   for (const item of items || []) {
     const c = item.cusipConflict;
-    if (c) lines.push([c.stock_symbol, c.company_name, item.stock_symbol, item.company_name, c.cusip]);
-    if (item.movedTo) lines.push([item.stock_symbol, item.company_name, item.movedTo.stock_symbol, item.movedTo.company_name, item.movedTo.cusip]);
-    if (item.replacedBy) lines.push([item.stock_symbol, item.company_name, item.replacedBy.stock_symbol, item.replacedBy.company_name, item.replacedBy.cusip]);
+    if (c) lines.push([c.id, c.stock_symbol, c.company_name, item.id, item.stock_symbol, item.company_name, c.cusip]);
+    const m = item.movedTo;
+    if (m) lines.push([item.id, item.stock_symbol, item.company_name, m.id, m.stock_symbol, m.company_name, m.cusip]);
+    const r = item.replacedBy;
+    if (r) lines.push([item.id, item.stock_symbol, item.company_name, r.id, r.stock_symbol, r.company_name, r.cusip]);
   }
   return `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
