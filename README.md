@@ -92,7 +92,7 @@ The UI is available in Traditional Chinese and English (switch at the top right)
 | **Stock list** | Search, filter by market, export CSV, page through the list. **Edit** opens the row in the Add / Edit tab. |
 | **Add / Edit** | Add a stock (with the pre-fill and duplicate warning below) or edit the row chosen in the list. |
 | **Update data** | Update a company name, a stock symbol or a market: type a symbol (with autocomplete), click **Lookup**, enter the new value. |
-| **Stock monitor** | Preview or run the stock monitor (below), with progress and a per-row report. |
+| **Stock monitor** | Preview the stock monitor (below) - nothing is written - with progress, a per-row report and a CSV export. |
 
 Each stock has a detail page at `/<symbol>`, for example `/aapl` (links from the list add `?id=` to open the exact row). It shows every stored field, and after an add it explains anything that couldn't be found yet.
 
@@ -103,7 +103,7 @@ Each stock has a detail page at `/<symbol>`, for example `/aapl` (links from the
 | **Stock list** | Every row of `company_profiles` (about 79,000, including delisted and non-US stocks), paged on the server. Search by symbol or name, filter by market, and export the filtered list as CSV (UTF-8 with a BOM, so Excel shows accented names correctly). |
 | **Add / update** | Add a stock with symbol, company name and market, or update one. A pre-fill lookup gives the name and market from NASDAQ Trader and Yahoo, and a duplicate check rejects a symbol a non-delisted row already has, including equivalent spellings such as `BRK-B` and `BRK.B`. |
 | **Automatic detail lookup on add** | After an add, the server looks up sector, industry, CEO, address, website, description and CUSIP before it answers, waiting up to 20 seconds. The response explains anything that couldn't be found. Missing parts are retried automatically after 1, 5, 15 and 60 minutes. |
-| **Stock Monitor & Auto Update** | Checks every stock against the NASDAQ Trader listing and Yahoo. It marks each stock listed or delisted, and updates the name, market, OTC Category and Currency. It also fills in missing company details and CUSIPs, a few hundred rows per run. It never deletes a stock. A preview shows what would change without writing. With `MONITOR_DAILY_AT=03:00` in `.env`, it runs automatically every day at that time. |
+| **Stock monitor (preview only)** | Checks the stocks without a CUSIP against the NASDAQ Trader listing and Yahoo, and shows what would change - listed / delisted, name, market, OTC Category, currency, renames and ticker changes - without writing anything. The applying "Check & Update" run and the daily schedule were removed on 2026-10-16. |
 
 **Removed features.** Delete, the deletion log, the change-history pages, the manual-add log, and Re-check / removal candidates have all been removed. The app's account can't create the extra tables these features need, and it isn't allowed to delete rows. `company_profiles` records its own changes with a database audit trigger.
 
@@ -128,10 +128,11 @@ To get an exact row, use `GET /api/stocks/:id`.
 | `GET /api/stocks/yahoo-lookup/:symbol` | Pre-fill data for an add (read-only). `409` if the stock already exists. |
 | `POST /api/stocks` | Add a stock. Returns `409` for a duplicate. The response includes an `autofill` report. |
 | `PUT /api/stocks/:id` | Update a stock |
-| `POST /api/monitor/run` | Start the stock monitor. Body `{ "apply": true }` writes changes; `false` only previews. |
-| `GET /api/monitor/status` | Progress of the running check, the last report and the next scheduled run |
-| `GET /api/monitor/report` | The last report's per-row changes and notes |
-| `POST /api/monitor/stop` | Stop the running check |
+| `POST /api/monitor/run` | Start a stock-monitor preview (nothing is written) |
+| `GET /api/monitor/status` | Progress of the running preview and the last preview's summary |
+| `GET /api/monitor/report` | The last preview's per-row changes and notes |
+| `GET /api/monitor/export.csv` | The last preview's renames / ticker changes as CSV (old / new id, symbol, name, CUSIP) |
+| `POST /api/monitor/stop` | Stop the running preview |
 | `GET /api/health` | Liveness check (doesn't touch the database) |
 
 There is no `DELETE` endpoint.
@@ -149,7 +150,7 @@ These scripts connect to the database directly. The server doesn't need to be ru
 | `fill-cusip.js [SYMBOL...]` | Fill in missing CUSIPs (SEC EDGAR first, then quantumonline) |
 | `audit-stocks.js [--out file.csv]` | Read-only cross-check of NASDAQ/NYSE/AMEX/OTC rows against NASDAQ Trader, SEC and Yahoo. Writes `exports/audit-report.csv`. |
 | `export-to-csv.js` | Export the whole table to `exports/stocks.csv` |
-| `monitor-stocks.js [--apply] [--list] [SYMBOL...]` | Run the stock monitor from the command line. Without `--apply` it only previews. `--list` prints every change. |
+| `monitor-stocks.js [--list] [SYMBOL...]` | Stock-monitor preview from the command line (nothing is written). `--list` prints every change. |
 
 Run without symbols, the `fill-*` scripts process every non-delisted row with a missing value, where an empty string also counts as missing. That's tens of thousands of rows here, so passing symbols is usually what you want.
 

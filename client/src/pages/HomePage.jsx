@@ -1,6 +1,6 @@
 // Main page: tabs for the stock list, add stock, the lookup-before-edit forms and the stock
-// monitor. The tab is kept in the URL hash (#list, #form, #edit, #monitor; the monitor's own
-// pages add /preview or /apply).
+// monitor (preview only since 2026-10-16). The tab is kept in the URL hash (#list, #form,
+// #edit, #monitor).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LangContext, useLang } from '../i18n';
 import { TRANSLATIONS } from '../translations';
@@ -183,7 +183,7 @@ export default function HomePage() {
             <LookupEditForm name="market" onSuggest={suggestSymbols} onUpdated={() => { refreshList(); fetchMarkets(); }} />
           </>
         ))}
-        {panel('monitor', <MonitorPanel onApplied={() => { refreshList(); fetchMarkets(); }} />)}
+        {panel('monitor', <MonitorPanel />)}
       </main>
     </LangContext.Provider>
   );

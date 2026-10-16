@@ -1,25 +1,20 @@
-// Stock monitor tab (server: routes/monitor.js). A check runs in the background on the server;
-// this polls its status. The last preview and the last Check & Update are shown on separate
-// pages (#monitor/preview, #monitor/apply), each filterable by category.
+// Stock monitor tab (server: routes/monitor.js) - preview only: since 2026-10-16 (the user) the
+// writing "Check & Update" run, its results page and the daily schedule are gone. A preview runs
+// in the background on the server; this polls its status and shows the last one, filterable by
+// category, with its CSV export.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import { API, PAGE_SIZE, cx } from '../lib/stocks';
-import { MONITOR_CATEGORIES, MONITOR_GROUPS, describeNote, isApplyResult, noteKind } from '../lib/monitorCategories';
+import { API, PAGE_SIZE } from '../lib/stocks';
+import { MONITOR_CATEGORIES, MONITOR_GROUPS, describeNote, noteKind } from '../lib/monitorCategories';
 import { Alert, Badge, Button, Card, Chip, Lines, Pagination, StockLink, Table, TD } from './ui';
 
 const MONITOR_POLL_MS = 3000;
 const STATUS_BADGE = { listed: 'green', delisted: 'red', unknown: 'gray' };
-const VIEWS = ['preview', 'apply'];
-// Company detail columns (item.filled.details, and refreshed values in item.changes) -> the form's field labels.
+// Company detail columns (in old reports' item.changes) -> the form's field labels.
 const DETAIL_LABEL = {
   sector: 'labelSector', industry: 'labelIndustry', currency: 'labelCurrency', company_location: 'labelLocation',
   companysite: 'labelUrl', description: 'labelDescription', ceo: 'labelCeo',
 };
-
-function viewFromHash() {
-  const sub = window.location.hash.split('/')[1];
-  return VIEWS.includes(sub) ? sub : null;
-}
 
 function describeValue(field, value, t) {
   if (field === 'isdelisted') return value ? t('yes') : t('no');
@@ -42,7 +37,7 @@ function CategoryFilter({ items, category, onPick, view }) {
         if (!cats.length) return null;
         return (
           <div key={g.key} className="flex flex-wrap items-center gap-2">
-            <span className="w-full text-xs font-medium text-slate-800 sm:w-40 dark:text-slate-100">{t((view === 'apply' && g.applyLabelKey) || g.labelKey)}</span>
+            <span className="w-full text-xs font-medium text-slate-800 sm:w-40 dark:text-slate-100">{t(g.labelKey)}</span>
             {cats.map((c) => (
               <Chip key={c.key} id={`monitor-${view}-cat-${c.key}`} tone={c.tone} active={category === c.key} count={counts[c.key]} onClick={() => onPick(c.key)}>
                 {t('monitorCats')[c.key]}
@@ -56,39 +51,30 @@ function CategoryFilter({ items, category, onPick, view }) {
   );
 }
 
-// One report (the last preview, or the last Check & Update): loads its items whenever a newer
-// run of that kind has finished.
-function MonitorReport({ view, summary, hidden, onLoaded }) {
+// The last preview's report: loads its items whenever a newer preview has finished.
+function MonitorReport({ summary }) {
+  const view = 'preview';
   const t = useT();
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('all'); // MONITOR_CATEGORIES key, or 'all'
   const finishedAt = summary && summary.finishedAt;
-  const onLoadedRef = useRef(onLoaded);
-  onLoadedRef.current = onLoaded;
 
   useEffect(() => {
     if (!finishedAt) return undefined;
     let cancelled = false;
     (async () => {
-      const res = await fetch(`${API}/monitor/report?mode=${view}`).catch(() => null);
-      let list = res && res.ok ? await res.json() : [];
+      const res = await fetch(`${API}/monitor/report?mode=preview`).catch(() => null);
+      const list = res && res.ok ? await res.json() : [];
       if (cancelled) return;
-      if (view === 'apply') {
-        list = list.filter(isApplyResult);
-        // Rows whose fields were changed first, then rows that only got company info / CUSIP.
-        list.sort((a, b) => (b.changes.length > 0) - (a.changes.length > 0));
-      } else {
-        // Rows that would change first, then rows that only carry a note.
-        list.sort((a, b) => (b.changes.length > 0) - (a.changes.length > 0));
-      }
+      // Rows that would change first, then rows that only carry a note.
+      list.sort((a, b) => (b.changes.length > 0) - (a.changes.length > 0));
       setItems(list);
       setPage(1);
       setCategory('all');
-      if (onLoadedRef.current) onLoadedRef.current();
     })();
     return () => { cancelled = true; };
-  }, [view, finishedAt]);
+  }, [finishedAt]);
 
   const activeCategory = MONITOR_CATEGORIES.find((c) => c.key === category);
   const shown = activeCategory ? items.filter(activeCategory.test) : items;
@@ -104,10 +90,10 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
   const pairCount = items.reduce((n, it) => n + (it.cusipConflict ? 1 : 0) + (it.movedTo ? 1 : 0) + (it.replacedBy ? 1 : 0), 0);
 
   return (
-    <div id={`monitor-report-${view}`} className={hidden ? 'hidden' : ''}>
+    <div id={`monitor-report-${view}`}>
       {pairCount > 0 && (
         <div className="mb-3 flex justify-end">
-          <Button id={`monitor-export-${view}`} onClick={() => { window.location.href = `${API}/monitor/export.csv?mode=${view}`; }} title={t('monitorExportHint')}>
+          <Button id={`monitor-export-${view}`} onClick={() => { window.location.href = `${API}/monitor/export.csv`; }} title={t('monitorExportHint')}>
             {t('monitorExportBtn')(pairCount)}
           </Button>
         </div>
@@ -132,14 +118,14 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
               <td className={TD}><StockLink symbol={item.stock_symbol} id={item.id} /></td>
               <td className={TD}>{item.company_name}</td>
               <td className={TD}><Badge tone={STATUS_BADGE[item.status] || 'gray'} title={item.reason}>{t('monitorStatus')[item.status] || item.status}</Badge></td>
-              <td className={cx(TD)}><Lines lines={lines} /></td>
+              <td className={TD}><Lines lines={lines} /></td>
             </tr>
           );
         })}
       </Table>
       {shown.length === 0 && (
         <p id={`monitor-empty-state-${view}`} className="py-8 text-center text-sm text-slate-800 dark:text-slate-100">
-          {items.length ? t('monitorCatEmpty') : (view === 'apply' ? t('monitorEmptyApply') : t('monitorEmptyPreview'))}
+          {items.length ? t('monitorCatEmpty') : t('monitorEmptyPreview')}
         </p>
       )}
       <Pagination page={shownPage} totalPages={totalPages} total={shown.length} onPage={setPage} idPrefix={`monitor-${view}-`} />
@@ -147,27 +133,14 @@ function MonitorReport({ view, summary, hidden, onLoaded }) {
   );
 }
 
-export default function MonitorPanel({ onApplied }) {
+
+export default function MonitorPanel() {
   const t = useT();
   const [state, setState] = useState(null); // GET /api/monitor/status
   const [message, setMessage] = useState(''); // starting / stopping / failed, until the next poll
   const [starting, setStarting] = useState(false);
   const [stopClicked, setStopClicked] = useState(false);
-  const [view, setView] = useState(() => viewFromHash() || 'preview');
   const timer = useRef(null);
-  const appliedSeen = useRef(null); // finishedAt of the applying run the list was refreshed for
-
-  const showView = useCallback((next) => {
-    setView(next);
-    const hash = `#monitor/${next}`;
-    if (window.location.hash !== hash) window.history.replaceState(window.history.state, '', hash);
-  }, []);
-
-  useEffect(() => {
-    const onHash = () => { const v = viewFromHash(); if (v) setView(v); };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, []);
 
   const poll = useCallback(async () => {
     clearTimeout(timer.current);
@@ -189,23 +162,17 @@ export default function MonitorPanel({ onApplied }) {
     setStopClicked(false);
   }, []);
 
-  // Also picks up a run still going from before a page reload.
+  // Also picks up a preview still going from before a page reload.
   useEffect(() => {
     poll();
     return () => clearTimeout(timer.current);
   }, [poll]);
 
-  async function start(apply) {
-    if (apply && !window.confirm(t('monitorConfirmApply'))) return;
-    showView(apply ? 'apply' : 'preview');
+  async function start() {
     setStarting(true);
     setMessage(t('monitorStarting'));
     try {
-      const res = await fetch(`${API}/monitor/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apply }),
-      });
+      const res = await fetch(`${API}/monitor/run`, { method: 'POST' });
       if (res.status === 409) setMessage(t('monitorAlreadyRunning'));
     } catch (err) {
       setMessage(t('monitorFailed')(err.message));
@@ -223,72 +190,35 @@ export default function MonitorPanel({ onApplied }) {
     }
   }
 
-  const reports = (state && state.reports) || {};
+  const summary = state && state.reports && state.reports.preview;
   const running = Boolean(state && state.running);
-  const runningView = state && (state.apply ? 'apply' : 'preview');
-  const summary = reports[view];
   let statusLines = [];
   if (message) statusLines = [message];
   else if (state) {
     if (running) {
       const p = state.progress || {};
-      statusLines.push(state.stopRequested ? t('monitorStopping') : t('monitorRunning')(state.apply, p.phase || 'loading', p.done || 0, p.total || 0));
-    } else if (state.lastError && runningView === view) {
+      statusLines.push(state.stopRequested ? t('monitorStopping') : t('monitorRunning')(false, p.phase || 'loading', p.done || 0, p.total || 0));
+    } else if (state.lastError) {
       statusLines.push(t('monitorFailed')(state.lastError));
     }
-    if (summary && !(running && runningView === view)) {
+    if (summary && !running) {
       statusLines.push((summary.stopped ? t('monitorStoppedNote')(summary) : '') + t('monitorSummary')(summary, t('monitorFields')));
     }
-    if (view === 'apply' && state.nextScheduledAt) statusLines.push(t('monitorNext')(state.nextScheduledAt));
   }
   const progress = running && state.progress && state.progress.total ? Math.round((state.progress.done / state.progress.total) * 100) : null;
 
-  // After an applying run, refresh the stock list and market options once.
-  const onApplyLoaded = useCallback(() => {
-    const finished = reports.apply && reports.apply.finishedAt;
-    if (finished && appliedSeen.current !== finished) {
-      appliedSeen.current = finished;
-      onApplied();
-    }
-  }, [reports.apply, onApplied]);
-
   const actions = (
     <>
-      <Button id="monitor-preview-btn" disabled={running || starting} onClick={() => start(false)}>{t('monitorPreviewBtn')}</Button>
-      <Button id="monitor-apply-btn" variant="primary" disabled={running || starting} onClick={() => start(true)}>{t('monitorApplyBtn')}</Button>
+      <Button id="monitor-preview-btn" variant="primary" disabled={running || starting} onClick={start}>{t('monitorPreviewBtn')}</Button>
       {running && <Button id="monitor-stop-btn" variant="danger" disabled={stopClicked || Boolean(state.stopRequested)} onClick={stop}>{t('monitorStopBtn')}</Button>}
     </>
-  );
-
-  const viewButton = (id, label) => (
-    <button
-      key={id}
-      type="button"
-      id={`monitor-view-${id}`}
-      role="tab"
-      aria-selected={view === id}
-      onClick={() => showView(id)}
-      className={cx(
-        'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-        view === id
-          ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white'
-          : 'text-slate-800 hover:text-slate-950 dark:text-slate-200 dark:hover:text-white',
-      )}
-    >
-      {label}
-    </button>
   );
 
   return (
     <Card title={t('monitorTitle')} actions={actions}>
       <p className="mb-3 text-sm text-slate-800 dark:text-slate-100">{t('monitorHelp')}</p>
-      <nav role="tablist" className="mb-3 inline-flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-        {viewButton('preview', t('monitorViewPreview'))}
-        {viewButton('apply', t('monitorViewApply'))}
-      </nav>
-      {view === 'apply' && <p className="mb-3 text-sm text-slate-800 dark:text-slate-100">{t('monitorViewApplyHelp')}</p>}
       {statusLines.length > 0 && (
-        <Alert id="monitor-status" tone={state && state.lastError && !running && runningView === view ? 'error' : 'info'} live="polite" className="mb-4">
+        <Alert id="monitor-status" tone={state && state.lastError && !running ? 'error' : 'info'} live="polite" className="mb-4">
           <Lines lines={statusLines} />
         </Alert>
       )}
@@ -297,8 +227,7 @@ export default function MonitorPanel({ onApplied }) {
           <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
         </div>
       )}
-      <MonitorReport view="preview" summary={reports.preview} hidden={view !== 'preview'} />
-      <MonitorReport view="apply" summary={reports.apply} hidden={view !== 'apply'} onLoaded={onApplyLoaded} />
+      <MonitorReport summary={summary} />
     </Card>
   );
 }
