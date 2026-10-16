@@ -4,34 +4,31 @@ const { runStockMonitor } = require('../lib/stockMonitor');
 
 const router = express.Router();
 
-// One run at a time, in the background; the UI polls GET /status. The last preview and the last
-// applying run are kept separately (the UI shows them on separate pages). State is in-process, so
-// a server restart forgets them (the table itself keeps every change).
+// Preview only (the user, 2026-10-16): the writing "Check & Update" run and the daily schedule
+// (MONITOR_DAILY_AT) were removed - nothing here writes to the table. One preview at a time, in
+// the background; the UI polls GET /status. The last preview is kept in-process, so a server
+// restart forgets it.
 const state = {
   running: false,
-  apply: false,
-  trigger: null, // 'manual' | 'schedule'
   startedAt: null,
   progress: null,
-  reports: { preview: null, apply: null },
+  reports: { preview: null },
   lastError: null,
-  nextScheduledAt: null,
   stopRequested: false,
 };
 
-function startRun({ apply, trigger }) {
+function startRun() {
   if (state.running) return false;
-  Object.assign(state, { running: true, apply, trigger, startedAt: new Date().toISOString(), progress: null, lastError: null, stopRequested: false });
+  Object.assign(state, { running: true, startedAt: new Date().toISOString(), progress: null, lastError: null, stopRequested: false });
   runStockMonitor(pool, {
-    apply,
+    apply: false,
     shouldStop: () => state.stopRequested,
-    cusipLimit: Number(process.env.MONITOR_CUSIP_LIMIT) || undefined,
     onProgress: (p) => { state.progress = p; },
   })
     .then((report) => {
-      state.reports = { ...state.reports, [apply ? 'apply' : 'preview']: { ...report, trigger } };
+      state.reports = { preview: report };
       const c = report.counts;
-      console.log(`[monitor] ${apply ? 'applied' : 'preview'}${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, cusip tried ${report.cusip.tried} / filled ${report.cusip.filled} / conflicts ${report.cusip.conflicts} / errors ${report.cusip.errors}, ${report.cusip.missing} still missing`);
+      console.log(`[monitor] preview${report.stopped ? ' (stopped)' : ''}: ${c.checked} checked, ${c.listed} listed, ${c.delisted} delisted, ${c.unknown} unknown, ${report.items.filter((i) => i.changes.length).length} with changes, ${report.cusip.missing} without a CUSIP`);
     })
     .catch((err) => {
       state.lastError = err.message;
@@ -44,38 +41,35 @@ function startRun({ apply, trigger }) {
   return true;
 }
 
-// POST /api/monitor/run { apply: true|false } - false only previews (nothing is written).
+// POST /api/monitor/run - start a preview (nothing is written; an `apply` in the body is ignored).
 router.post('/run', (req, res) => {
-  const apply = Boolean(req.body && req.body.apply);
-  if (!startRun({ apply, trigger: 'manual' })) {
+  if (!startRun()) {
     return res.status(409).json({ errors: ['a check is already running'] });
   }
-  res.status(202).json({ started: true, apply });
+  res.status(202).json({ started: true, apply: false });
 });
 
-// POST /api/monitor/stop - ask the running check to stop at its next row / batch. Changes
-// already written stay; a stop while quotes are still being fetched writes nothing.
+// POST /api/monitor/stop - ask the running preview to stop at its next row / batch.
 router.post('/stop', (req, res) => {
   if (!state.running) return res.status(409).json({ errors: ['no check is running'] });
   state.stopRequested = true;
   res.status(202).json({ stopping: true });
 });
 
-// GET /api/monitor/status - running state + both reports' summaries (no item lists).
+// GET /api/monitor/status - running state + the last preview's summary (no item list).
 router.get('/status', (req, res) => {
   const { reports, ...rest } = state;
   const summary = (r) => r && (({ items, ...s }) => ({ ...s, itemCount: items.length }))(r);
-  res.json({ ...rest, reports: { preview: summary(reports.preview), apply: summary(reports.apply) } });
+  res.json({ ...rest, reports: { preview: summary(reports.preview) } });
 });
 
-// GET /api/monitor/report?mode=preview|apply - that report's per-stock items (changes, notes and,
-// for an applying run, the company details / CUSIPs filled).
+// GET /api/monitor/report - the last preview's per-stock items (what would change, notes).
 router.get('/report', (req, res) => {
-  const report = state.reports[req.query.mode === 'apply' ? 'apply' : 'preview'];
+  const report = state.reports.preview;
   res.json(report ? report.items : []);
 });
 
-// GET /api/monitor/export.csv?mode=preview|apply - the report's rows that pair an old and a new
+// GET /api/monitor/export.csv - the last preview's rows that pair an old and a new
 // stock (the user, 2026-10-16: only old id + symbol + name, new id + symbol + name and the CUSIP):
 //   - a CUSIP found for a row but already held by another live row (BRTM found G1535G125, which
 //     BRTMU holds): old = the holder, new = the row it was found for;
@@ -102,31 +96,12 @@ function oldNewCusipCsv(items) {
   return `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
 router.get('/export.csv', (req, res) => {
-  const mode = req.query.mode === 'apply' ? 'apply' : 'preview';
-  const report = state.reports[mode];
+  const report = state.reports.preview;
   const day = (report && report.finishedAt ? new Date(report.finishedAt) : new Date()).toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="monitor-${mode}-old-new-cusip-${day}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="monitor-preview-old-new-cusip-${day}.csv"`);
   res.send(oldNewCusipCsv(report && report.items));
 });
 
-// MONITOR_DAILY_AT=HH:MM in .env runs an applying check every day at that local time.
-// Unset = no schedule (the buttons and scripts/monitor-stocks.js still work).
-function scheduleDaily() {
-  const at = process.env.MONITOR_DAILY_AT;
-  const m = at && at.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return;
-  const next = new Date();
-  next.setHours(Number(m[1]), Number(m[2]), 0, 0);
-  if (next <= new Date()) next.setDate(next.getDate() + 1);
-  state.nextScheduledAt = next.toISOString();
-  setTimeout(() => {
-    startRun({ apply: true, trigger: 'schedule' });
-    scheduleDaily();
-  }, next - Date.now()).unref();
-  console.log(`[monitor] daily check scheduled for ${next.toString()}`);
-}
-
 module.exports = router;
-module.exports.scheduleDaily = scheduleDaily;
 module.exports.oldNewCusipCsv = oldNewCusipCsv;

@@ -1,29 +1,25 @@
-// Usage: node scripts/monitor-stocks.js [--apply] [--cusip-limit N] [--list] [SYMBOL ...]
-// Checks the stocks that have no CUSIP (live, US market) against NASDAQ Trader's listing and
-// Yahoo Finance (lib/stockMonitor.js): listed / delisted status, name, market, OTC category,
-// currency, then looks up the CUSIP of every one still trading (--cusip-limit caps that).
-// Rows that already have a CUSIP are not checked. Never deletes.
-// Preview only (nothing written) unless --apply. --list prints every change and note.
+// Usage: node scripts/monitor-stocks.js [--list] [SYMBOL ...]
+// Preview of the stock monitor (lib/stockMonitor.js) - writes nothing. Checks the stocks that have
+// no CUSIP (live, US market) against NASDAQ Trader's listing and Yahoo Finance and reports what it
+// would change: listed / delisted status, name, market, OTC category, currency, renames and ticker
+// changes. --list prints every change and note. (The applying --apply run was removed at the
+// user's request on 2026-10-16.)
 require('dotenv').config();
 const pool = require('../db');
 const { runStockMonitor } = require('../lib/stockMonitor');
 
-function argValue(name) {
-  const i = process.argv.indexOf(name);
-  return i > -1 ? Number(process.argv[i + 1]) : undefined;
-}
-
 async function main() {
   const args = process.argv.slice(2);
-  const apply = args.includes('--apply');
+  if (args.includes('--apply')) {
+    console.error('--apply was removed (2026-10-16): the monitor only previews now - nothing is written.');
+    process.exit(2);
+  }
   const list = args.includes('--list');
-  const symbols = args.filter((a, i) => !a.startsWith('--') && !/^--cusip-limit$/.test(args[i - 1] || ''));
+  const symbols = args.filter((a) => !a.startsWith('--'));
 
   let lastPhase = '';
   const report = await runStockMonitor(pool, {
-    apply,
     symbols,
-    cusipLimit: argValue('--cusip-limit'),
     onProgress: ({ phase, done, total }) => {
       if (phase !== lastPhase || done === total) console.log(`[${phase}] ${done}/${total}`);
       lastPhase = phase;
@@ -31,11 +27,11 @@ async function main() {
   });
 
   const { counts, fieldCounts, cusip } = report;
-  console.log(`\n${apply ? 'APPLIED' : 'PREVIEW (nothing written - pass --apply to write)'}`);
+  console.log('\nPREVIEW (nothing written)');
   console.log(`Checked ${counts.checked} rows without a CUSIP: listed ${counts.listed}, delisted ${counts.delisted}, unknown ${counts.unknown}`);
-  console.log(`Field changes: ${JSON.stringify(fieldCounts)}${apply ? `; rows updated ${counts.updated}, errors ${counts.errors}` : ''}`);
-  if (counts.added) console.log(`New rows for renamed / moved stocks: ${counts.added}${apply ? ' added' : ' would be added'} (their old rows marked delisted, names kept)`);
-  console.log(`CUSIP: ${cusip.missing} trading US rows missing; ${apply ? `tried ${cusip.tried}, filled ${cusip.filled}, conflicts ${cusip.conflicts}, errors ${cusip.errors}` : 'looked up only with --apply'}`);
+  console.log(`Field changes it would make: ${JSON.stringify(fieldCounts)}`);
+  if (counts.added) console.log(`New rows it would add for renamed / moved stocks: ${counts.added} (their old rows marked delisted, names kept)`);
+  console.log(`CUSIP: ${cusip.missing} trading US rows without one`);
   if (!report.listingAvailable) console.log('WARNING: NASDAQ Trader listing unavailable - listed stocks were judged on Yahoo alone.');
   if (report.failedQuotes) console.log(`WARNING: ${report.failedQuotes} symbols failed on Yahoo - their status was left alone.`);
 

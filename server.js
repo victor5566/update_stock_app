@@ -45,5 +45,4 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`Stock symbol manager listening on ${HOST}:${PORT} (web UI and /api)`);
-  monitorRouter.scheduleDaily();
 });
