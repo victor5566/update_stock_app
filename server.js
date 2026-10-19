@@ -15,6 +15,14 @@ const CLIENT_BUILD = path.join(__dirname, 'client', 'build');
 
 const app = express();
 
+// Behind a reverse proxy (78.138.118.155: nginx on the VPS -> the company-profiler LXC container),
+// every request comes from the proxy's address; trusting a proxy on a private / loopback address
+// makes req.ip the browser's (X-Forwarded-For) - the login lockout counts failures per req.ip, so
+// otherwise one person's typos would lock everyone out - and req.secure follow X-Forwarded-Proto.
+// TRUST_PROXY in .env overrides it (Express's 'trust proxy' syntax, e.g. "false" or "10.0.3.1").
+const TRUST_PROXY = process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal';
+app.set('trust proxy', TRUST_PROXY === 'false' ? false : TRUST_PROXY);
+
 app.use(cors());
 app.use(express.json());
 
