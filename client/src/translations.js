@@ -134,7 +134,7 @@ export const TRANSLATIONS = {
     monitorStopping: '正在中止，會在目前這筆處理完後停止…',
     monitorAlreadyRunning: '已有偵測正在執行',
     monitorFailed: (msg) => `偵測失敗：${msg}`,
-    monitorRunning: (apply, phase, done, total) => `${apply ? '偵測並更新中' : '預覽中'}：${({ loading: '讀取資料', quotes: '取得 Yahoo 報價', updating: '逐筆檢查名稱、市場與 CUSIP' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
+    monitorRunning: (apply, phase, done, total) => `${apply ? '偵測並更新中' : '預覽中'}：${({ loading: '讀取資料', quotes: '取得 Yahoo 報價', otc: '向 OTC Markets 確認 OTC 股票', updating: '逐筆檢查名稱、市場與 CUSIP' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '【已中止：在取得報價階段停止，未寫入任何變更】' : `【已中止${r.apply ? '，中止前的變更已寫入' : ''}】`),
     monitorSummary: (r, fields) => `上次${r.apply ? '偵測並更新' : '預覽（未寫入）'}（${new Date(r.finishedAt).toLocaleString('zh-TW')}${r.trigger === 'schedule' ? '，排程' : ''}）：檢查 ${r.counts.checked.toLocaleString()} 筆沒有 CUSIP 的股票，上市 ${r.counts.listed.toLocaleString()}、下市 ${r.counts.delisted.toLocaleString()}、無法判斷 ${r.counts.unknown.toLocaleString()}。`
       + `欄位變更：${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join('、') || '無'}${r.apply ? `（已更新 ${r.counts.updated} 筆${r.counts.errors ? `，失敗 ${r.counts.errors}` : ''}）` : ''}。`
@@ -327,7 +327,7 @@ export const TRANSLATIONS = {
     monitorStopping: 'Stopping after the current row…',
     monitorAlreadyRunning: 'A check is already running',
     monitorFailed: (msg) => `Check failed: ${msg}`,
-    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({ loading: 'loading rows', quotes: 'fetching Yahoo quotes', updating: 'checking name, market and CUSIP per stock' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
+    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({ loading: 'loading rows', quotes: 'fetching Yahoo quotes', otc: 'checking OTC stocks with OTC Markets', updating: 'checking name, market and CUSIP per stock' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '[Stopped while fetching quotes - nothing was written] ' : `[Stopped${r.apply ? ' - changes made before the stop were written' : ''}] `),
     monitorSummary: (r, fields) => `Last ${r.apply ? 'check & update' : 'preview (nothing written)'} (${new Date(r.finishedAt).toLocaleString('en-US')}${r.trigger === 'schedule' ? ', scheduled' : ''}): checked ${r.counts.checked.toLocaleString()} stocks without a CUSIP - listed ${r.counts.listed.toLocaleString()}, delisted ${r.counts.delisted.toLocaleString()}, unknown ${r.counts.unknown.toLocaleString()}. `
       + `Field changes: ${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join(', ') || 'none'}${r.apply ? ` (${r.counts.updated} rows updated${r.counts.errors ? `, ${r.counts.errors} failed` : ''})` : ''}. `
