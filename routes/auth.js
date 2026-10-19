@@ -1,7 +1,7 @@
 // /api/auth - login / logout / who am I. Open without a session (server.js mounts it before
 // requireAuth); see lib/auth.js.
 const express = require('express');
-const { EMAIL_ONLY, verifyLogin, sessionUser, setSessionCookie, clearSessionCookie, confirmedAt } = require('../lib/auth');
+const { EMAIL_ONLY, verifyLogin, sessionUser, setSessionCookie, clearSessionCookie, forgetSession } = require('../lib/auth');
 
 const router = express.Router();
 
@@ -35,8 +35,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ errors: ['wrong email or password'], code: 'invalid', emailOnly: EMAIL_ONLY });
     }
     failures.delete(req.ip);
-    confirmedAt.set(user.id, Date.now());
-    setSessionCookie(res, user);
+    await setSessionCookie(res, user);
     res.json({ user, emailOnly: EMAIL_ONLY });
   } catch (err) {
     next(err);
@@ -44,6 +43,7 @@ router.post('/login', async (req, res, next) => {
 });
 
 router.post('/logout', (req, res) => {
+  forgetSession(req);
   clearSessionCookie(res);
   res.json({ ok: true });
 });
