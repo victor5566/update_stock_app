@@ -3,8 +3,7 @@
 // page (the user, 2026-10-19): the email is lowercased as it is typed, the password can be shown,
 // "Please fill all values", Sign In / Signing in.... The form is centered on the page.
 import { useState } from 'react';
-import { LangContext, useLang } from '../i18n';
-import { TRANSLATIONS } from '../translations';
+import { useT, useTitle } from '../i18n';
 import { login } from '../auth';
 import { Alert, Button, Field, Input, PageHeader } from '../components/ui';
 
@@ -22,8 +21,8 @@ function EyeIcon({ open }) {
 
 // emailOnly: the server logs in by email alone (LOGIN_EMAIL_ONLY) - no password field then.
 export default function LoginPage({ onLogin, expired, loadError, emailOnly }) {
-  const [lang, setLang] = useLang('loginTitle');
-  const t = (key) => TRANSLATIONS[lang][key];
+  useTitle('loginTitle');
+  const t = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,8 +54,8 @@ export default function LoginPage({ onLogin, expired, loadError, emailOnly }) {
   else if (loadError) notice = <Alert tone="error" id="login-load-error" live>{t('loginNetworkError')}</Alert>;
 
   return (
-    <LangContext.Provider value={lang}>
-      <PageHeader title={t('pageTitle')} subtitle={t('subtitle')} lang={lang} setLang={setLang} />
+    <>
+      <PageHeader title={t('pageTitle')} subtitle={t('subtitle')} />
       <main className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center px-4 py-10 sm:px-6">
         <section id="login-card" className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="p-6 sm:p-10">
@@ -100,6 +99,6 @@ export default function LoginPage({ onLogin, expired, loadError, emailOnly }) {
           </div>
         </section>
       </main>
-    </LangContext.Provider>
+    </>
   );
 }

@@ -2,8 +2,7 @@
 // (a symbol can have several rows - a recycled ticker keeps its delisted row).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { LangContext, useLang, useT } from '../i18n';
-import { TRANSLATIONS } from '../translations';
+import { useT, useTitle } from '../i18n';
 import { API, autoFillProblems, cx, retryNote } from '../lib/stocks';
 import { Alert, Badge, Card, PageHeader } from '../components/ui';
 
@@ -48,8 +47,8 @@ function DetailRow({ label, id, children, wide }) {
 }
 
 export default function StockPage() {
-  const [lang, setLang] = useLang('detailTitle');
-  const t = (key) => TRANSLATIONS[lang][key];
+  useTitle('detailTitle');
+  const t = useT();
   const { symbol: rawSymbol = '' } = useParams();
   const [searchParams] = useSearchParams();
   const symbol = rawSymbol.trim();
@@ -105,8 +104,8 @@ export default function StockPage() {
   const backLink = <Link to="/" className="text-blue-600 hover:underline dark:text-blue-400">{t('backToList')}</Link>;
 
   return (
-    <LangContext.Provider value={lang}>
-      <PageHeader title={title} subtitle={backLink} lang={lang} setLang={setLang} />
+    <>
+      <PageHeader title={title} subtitle={backLink} />
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
         {notFound && (
           <Card id="not-found-section"><p className="text-sm text-slate-900 dark:text-slate-100">{t('stockNotFound')}</p></Card>
@@ -149,6 +148,6 @@ export default function StockPage() {
           </Card>
         )}
       </main>
-    </LangContext.Provider>
+    </>
   );
 }

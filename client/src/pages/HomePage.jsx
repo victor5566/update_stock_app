@@ -2,8 +2,7 @@
 // monitor (preview only since 2026-10-16). The tab is kept in the URL hash (#list, #form,
 // #edit, #monitor).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LangContext, useLang } from '../i18n';
-import { TRANSLATIONS } from '../translations';
+import { useT, useTitle } from '../i18n';
 import { API, PAGE_SIZE, cx } from '../lib/stocks';
 import { PageHeader } from '../components/ui';
 import StockListPanel from '../components/StockListPanel';
@@ -19,8 +18,8 @@ function tabFromHash() {
 }
 
 export default function HomePage() {
-  const [lang, setLang] = useLang('pageTitle');
-  const t = (key) => TRANSLATIONS[lang][key];
+  useTitle('pageTitle');
+  const t = useT();
   const [tab, setTab] = useState(tabFromHash);
   const [markets, setMarkets] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
@@ -143,8 +142,8 @@ export default function HomePage() {
   );
 
   return (
-    <LangContext.Provider value={lang}>
-      <PageHeader title={t('pageTitle')} subtitle={t('subtitle')} lang={lang} setLang={setLang} />
+    <>
+      <PageHeader title={t('pageTitle')} subtitle={t('subtitle')} />
       <datalist id="stock-datalist">
         {suggestions.map((s) => <option key={s.id ?? s.stock_symbol} value={s.stock_symbol} label={s.company_name} />)}
       </datalist>
@@ -185,6 +184,6 @@ export default function HomePage() {
         ))}
         {panel('monitor', <MonitorPanel />)}
       </main>
-    </LangContext.Provider>
+    </>
   );
 }

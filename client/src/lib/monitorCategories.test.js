@@ -1,7 +1,7 @@
 import { MONITOR_CATEGORIES, describeNote, isApplyResult, noteKind } from './monitorCategories';
 import { TRANSLATIONS } from '../translations';
 
-const t = (key) => TRANSLATIONS.zh[key];
+const t = (key) => TRANSLATIONS.en[key];
 
 // The strings planRow() in lib/stockMonitor.js produces - if one changes there, change it here
 // and in NOTE_PATTERNS.
@@ -24,10 +24,8 @@ test('a row can be in several categories', () => {
   expect(keys).toEqual(['name', 'category']);
 });
 
-test('every category has a label in both languages', () => {
-  for (const lang of ['zh', 'en']) {
-    for (const c of MONITOR_CATEGORIES) expect(TRANSLATIONS[lang].monitorCats[c.key]).toBeTruthy();
-  }
+test('every category has a label', () => {
+  for (const c of MONITOR_CATEGORIES) expect(TRANSLATIONS.en.monitorCats[c.key]).toBeTruthy();
 });
 
 test('a rename blocked by the (symbol, name) index is its own category', () => {
@@ -36,8 +34,8 @@ test('a rename blocked by the (symbol, name) index is its own category', () => {
   const text = describeNote(note, t);
   expect(text).toContain('ADC Therapeutics SA');
   expect(text).toContain('8837');
-  expect(text).toContain('已下市');
-  expect(describeNote('name already used by another row with this symbol (id 5): X Corp - nothing changed', t)).not.toContain('已下市');
+  expect(text).toContain('delisted');
+  expect(describeNote('name already used by another row with this symbol (id 5): X Corp - nothing changed', t)).not.toContain('delisted');
 });
 
 test('an applying run lists changed and filled rows, not note-only rows', () => {
@@ -57,11 +55,9 @@ test('an applying run lists changed and filled rows, not note-only rows', () => 
 test("an old ticker's row delisted so its CUSIP can go to the new ticker", () => {
   const note = 'symbol changed to AXNX (id 135147) - this old row marked delisted, CUSIP G6146G117 now on the new row';
   expect(noteKind(note)).toMatchObject({ kind: 'tickerChanged', args: ['AXNX', '135147', 'G6146G117'] });
-  for (const lang of ['zh', 'en']) {
-    const text = describeNote(note, (key) => TRANSLATIONS[lang][key]);
-    expect(text).toContain('AXNX');
-    expect(text).toContain('G6146G117');
-  }
+  const text = describeNote(note, t);
+  expect(text).toContain('AXNX');
+  expect(text).toContain('G6146G117');
   const item = { changes: [{ field: 'isdelisted', from: false, to: true }], notes: [note] };
   expect(MONITOR_CATEGORIES.filter((c) => c.test(item)).map((c) => c.key)).toEqual(['delist', 'tickerChanged']);
 });
@@ -73,12 +69,9 @@ test('a rename / ticker change: old row delisted with its name kept, a new row a
   expect(noteKind(moved)).toMatchObject({ kind: 'replacedBy', args: ['AXNX', 'Axonex AI Group Limited', 'new ticker', 'AXNX already has a row'] });
   const added = 'new row replacing id 157378 (RNTZ "SKK Holdings Limited Class A")';
   expect(noteKind(added)).toMatchObject({ kind: 'newRowFor', args: ['157378', 'RNTZ', 'SKK Holdings Limited Class A'] });
-  for (const lang of ['zh', 'en']) {
-    const tl = (key) => TRANSLATIONS[lang][key];
-    expect(describeNote(old, tl)).toContain('Rantizo');
-    expect(describeNote(moved, tl)).toContain('AXNX');
-    expect(describeNote(added, tl)).toContain('157378');
-  }
+  expect(describeNote(old, t)).toContain('Rantizo');
+  expect(describeNote(moved, t)).toContain('AXNX');
+  expect(describeNote(added, t)).toContain('157378');
   expect(MONITOR_CATEGORIES.filter((c) => c.test({ changes: [{ field: 'isdelisted', from: false, to: true }], notes: [old] })).map((c) => c.key)).toEqual(['delist', 'replacedBy']);
   const newRow = { changes: [{ field: 'stock_symbol', from: null, to: 'RNTZ' }, { field: 'company_name', from: null, to: 'Rantizo' }], notes: [added] };
   expect(MONITOR_CATEGORIES.filter((c) => c.test(newRow)).map((c) => c.key)).toEqual(['name', 'newRow']);

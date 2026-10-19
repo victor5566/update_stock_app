@@ -167,22 +167,6 @@ export function Lines({ lines }) {
   return lines.map((line, i) => <Fragment key={i}>{i > 0 && <br />}{line}</Fragment>);
 }
 
-export function LangSelect({ lang, setLang }) {
-  return (
-    <select
-      id="lang-switch"
-      aria-label="Language"
-      value={lang}
-      onChange={(e) => setLang(e.target.value)}
-      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-    >
-      {/* Always in English, in both languages (the user, 2026-10-08). */}
-      <option value="zh">Chinese</option>
-      <option value="en">English</option>
-    </select>
-  );
-}
-
 // The logged-in account and Log out, when there is a session (not on the login page).
 function AccountBox() {
   const t = useT();
@@ -196,7 +180,7 @@ function AccountBox() {
   );
 }
 
-export function PageHeader({ title, subtitle, lang, setLang }) {
+export function PageHeader({ title, subtitle }) {
   return (
     <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -204,10 +188,7 @@ export function PageHeader({ title, subtitle, lang, setLang }) {
           <h1 id="page-heading" className="truncate text-xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
           {subtitle && <div className="mt-0.5 text-sm text-slate-800 dark:text-slate-100">{subtitle}</div>}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <AccountBox />
-          <LangSelect lang={lang} setLang={setLang} />
-        </div>
+        <AccountBox />
       </div>
     </header>
   );
