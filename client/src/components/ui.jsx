@@ -5,6 +5,7 @@ import { Fragment, forwardRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../i18n';
 import { cx, stockHref } from '../lib/stocks';
+import { useAuth } from '../auth';
 
 export function Card({ title, actions, children, className, id }) {
   return (
@@ -182,6 +183,19 @@ export function LangSelect({ lang, setLang }) {
   );
 }
 
+// The logged-in account and Log out, when there is a session (not on the login page).
+function AccountBox() {
+  const t = useT();
+  const { user, logout } = useAuth();
+  if (!user) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <span id="account-email" className="max-w-[14rem] truncate text-sm text-slate-800 dark:text-slate-100" title={user.email}>{user.email}</span>
+      <Button id="logout-btn" size="sm" onClick={logout}>{t('logoutBtn')}</Button>
+    </div>
+  );
+}
+
 export function PageHeader({ title, subtitle, lang, setLang }) {
   return (
     <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
@@ -190,7 +204,10 @@ export function PageHeader({ title, subtitle, lang, setLang }) {
           <h1 id="page-heading" className="truncate text-xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
           {subtitle && <div className="mt-0.5 text-sm text-slate-800 dark:text-slate-100">{subtitle}</div>}
         </div>
-        <LangSelect lang={lang} setLang={setLang} />
+        <div className="flex flex-wrap items-center gap-3">
+          <AccountBox />
+          <LangSelect lang={lang} setLang={setLang} />
+        </div>
       </div>
     </header>
   );

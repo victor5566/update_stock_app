@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const stocksRouter = require('./routes/stocks');
 const monitorRouter = require('./routes/monitor');
+const authRouter = require('./routes/auth');
+const { requireAuth } = require('./lib/auth');
 
 const PORT = process.env.PORT || 3000;
 // HOST: the address to listen on (0.0.0.0 = every interface).
@@ -20,6 +22,10 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
+
+// Login (open), then everything else under /api needs a session (lib/auth.js).
+app.use('/api/auth', authRouter);
+app.use('/api', requireAuth);
 
 app.use('/api/stocks', stocksRouter);
 app.use('/api/monitor', monitorRouter);
