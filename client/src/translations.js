@@ -131,13 +131,20 @@ export const TRANSLATIONS = {
     monitorHelp: 'Preview (nothing is written to the database): checks the US stocks (not delisted) that have no CUSIP yet and lists what would change - listed or delisted, name, market, category, currency, and stocks that were renamed or moved to a new ticker. Stocks that already have a CUSIP are not checked. Nothing is changed or deleted.',
     monitorPreviewBtn: 'Preview (no writes)',
     monitorStopBtn: 'Stop',
-    monitorExportBtn: (n) => `Export CSV (old / new symbols and CUSIP, ${n.toLocaleString()} rows)`,
-    monitorExportHint: 'Stocks that were renamed or moved to a new ticker: old id, symbol and name, new symbol and name (not added, so no id yet), CUSIP',
+    monitorExportBtn: (n) => `Export CSV (${n.toLocaleString()} stocks)`,
+    monitorExportNoPreview: 'Run a preview first - the export lists every stock it shows.',
+    monitorExportNone: 'The last preview listed no stocks to export.',
+    monitorExportHint: 'Every stock the preview lists: id, symbol, name, status, changes, notes; for a rename or new ticker also the new symbol and name (not added, so no id yet) and CUSIP',
     monitorStarting: 'Starting…',
     monitorStopping: 'Stopping after the current row…',
     monitorAlreadyRunning: 'A check is already running',
     monitorFailed: (msg) => `Check failed: ${msg}`,
-    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({ loading: 'loading rows', quotes: 'fetching Yahoo quotes', otc: 'checking OTC stocks with OTC Markets', updating: 'checking name, market and CUSIP per stock' })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
+    monitorRunning: (apply, phase, done, total) => `${apply ? 'Checking & updating' : 'Previewing'}: ${({
+      loading: 'step 1 of 4 - loading the stocks without a CUSIP',
+      quotes: 'step 2 of 4 - fetching Yahoo quotes (last trade date, name, market)',
+      otc: 'step 3 of 4 - confirming whether OTC stocks are still trading or delisted (asking OTC Markets about OTC stocks with no Yahoo trade for 120+ days)',
+      updating: 'step 4 of 4 - comparing status, name, market and category per stock',
+    })[phase] || phase}${total ? ` ${done.toLocaleString()}/${total.toLocaleString()}` : ''}…`,
     monitorStoppedNote: (r) => (r.stoppedDuringQuotes ? '[Stopped while fetching quotes - nothing was written] ' : `[Stopped${r.apply ? ' - changes made before the stop were written' : ''}] `),
     monitorSummary: (r, fields) => `Last ${r.apply ? 'check & update' : 'preview (nothing written)'} (${new Date(r.finishedAt).toLocaleString('en-US')}${r.trigger === 'schedule' ? ', scheduled' : ''}): checked ${r.counts.checked.toLocaleString()} stocks without a CUSIP - listed ${r.counts.listed.toLocaleString()}, delisted ${r.counts.delisted.toLocaleString()}, unknown ${r.counts.unknown.toLocaleString()}. `
       + `Field changes: ${Object.entries(r.fieldCounts).map(([f, n]) => `${fields[f] || f} ${n}`).join(', ') || 'none'}${r.apply ? ` (${r.counts.updated} rows updated${r.counts.errors ? `, ${r.counts.errors} failed` : ''})` : ''}. `

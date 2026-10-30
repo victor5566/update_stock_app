@@ -86,18 +86,22 @@ function MonitorReport({ summary }) {
     setPage(1);
   };
   const detailNames = (fields) => fields.map((f) => (DETAIL_LABEL[f] ? t(DETAIL_LABEL[f]) : f));
-  // Rows the CSV export lists (old / new symbol + name, CUSIP) - see GET /api/monitor/export.csv.
-  const pairCount = items.reduce((n, it) => n + (it.cusipConflict ? 1 : 0) + (it.movedTo ? 1 : 0) + (it.replacedBy ? 1 : 0), 0);
+  // The CSV export lists every stock of the report - see GET /api/monitor/export.csv.
+  const exportCount = items.length;
 
   return (
     <div id={`monitor-report-${view}`}>
-      {pairCount > 0 && (
-        <div className="mb-3 flex justify-end">
-          <Button id={`monitor-export-${view}`} onClick={() => { window.location.href = `${API}/monitor/export.csv`; }} title={t('monitorExportHint')}>
-            {t('monitorExportBtn')(pairCount)}
-          </Button>
-        </div>
-      )}
+      {/* Always shown (the user, 2026-10-30); disabled until a preview has rows to export. */}
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-3">
+        {exportCount === 0 && (
+          <span id={`monitor-export-empty-${view}`} className="text-xs text-slate-800 dark:text-slate-100">
+            {finishedAt ? t('monitorExportNone') : t('monitorExportNoPreview')}
+          </span>
+        )}
+        <Button id={`monitor-export-${view}`} disabled={exportCount === 0} onClick={() => { window.location.href = `${API}/monitor/export.csv`; }} title={t('monitorExportHint')}>
+          {t('monitorExportBtn')(exportCount)}
+        </Button>
+      </div>
       {items.length > 0 && <CategoryFilter items={items} category={category} onPick={pickCategory} view={view} />}
       <Table id={`monitor-table-${view}`} head={[t('labelSymbol'), t('labelCompany'), t('monitorThStatus'), t('monitorThChanges')]}>
         {shown.slice(first, first + PAGE_SIZE).map((item) => {

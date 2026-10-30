@@ -69,29 +69,29 @@ router.get('/report', (req, res) => {
   res.json(report ? report.items : []);
 });
 
-// GET /api/monitor/export.csv - the last preview's rows that pair an old and a new
-// stock (the user, 2026-10-16: only old id + symbol + name, new id + symbol + name and the CUSIP):
-//   - a CUSIP found for a row but already held by another live row (BRTM found G1535G125, which
-//     BRTMU holds): old = the holder, new = the row it was found for;
-//   - a ticker change found through the CUSIP (MIMI -> AXNX: old row delisted, CUSIP written to
-//     the new one), and a rename / ticker change seen from an old row without a CUSIP (old row
-//     delisted, a new row added - its CUSIP if one was found).
-// UTF-8 with a BOM so Excel shows accented names. The reports are in-process, so a server restart
-// empties it.
+// GET /api/monitor/export.csv - every stock the last preview lists (the user, 2026-10-30: all the
+// rows shown, not only the renamed ones), one line each: id, symbol, name, status, what would
+// change, notes, and - for a rename / ticker change (item.replacedBy: old row delisted, a new row
+// added; item.movedTo: the CUSIP's new ticker) - the new row's id, symbol, name and CUSIP (a
+// preview's new row has no id yet; ids because symbols aren't unique). A CUSIP held by another
+// live row (item.cusipConflict) goes into the notes. UTF-8 with a BOM so Excel shows accented
+// names. The reports are in-process, so a server restart empties it.
 const csvCell = (v) => {
   const s = v == null ? '' : String(v);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
-function oldNewCusipCsv(items) {
-  // ids too (the user, 2026-10-16) - symbols aren't unique; a preview's new row has no id yet.
-  const lines = [['old_id', 'old_symbol', 'old_name', 'new_id', 'new_symbol', 'new_name', 'cusip']];
+const csvValue = (v) => (v === null || v === undefined || v === '' ? '-' : String(v));
+function monitorReportCsv(items) {
+  const lines = [['id', 'symbol', 'name', 'status', 'changes', 'notes', 'new_id', 'new_symbol', 'new_name', 'cusip']];
   for (const item of items || []) {
+    const changes = (item.changes || []).map((c) => `${c.field}: ${csvValue(c.from)} -> ${csvValue(c.to)}`);
+    const notes = [...(item.notes || [])];
     const c = item.cusipConflict;
-    if (c) lines.push([c.id, c.stock_symbol, c.company_name, item.id, item.stock_symbol, item.company_name, c.cusip]);
-    const m = item.movedTo;
-    if (m) lines.push([item.id, item.stock_symbol, item.company_name, m.id, m.stock_symbol, m.company_name, m.cusip]);
-    const r = item.replacedBy;
-    if (r) lines.push([item.id, item.stock_symbol, item.company_name, r.id, r.stock_symbol, r.company_name, r.cusip]);
+    if (c) notes.push(`CUSIP ${c.cusip} already on ${c.stock_symbol} (id ${c.id})`);
+    if (item.error) notes.push(item.error);
+    const n = item.replacedBy || item.movedTo || {};
+    lines.push([item.id, item.stock_symbol, item.company_name, item.status, changes.join('; '), notes.join('; '),
+      n.id, n.stock_symbol, n.company_name, n.cusip || (c && c.cusip)]);
   }
   return `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
@@ -99,9 +99,9 @@ router.get('/export.csv', (req, res) => {
   const report = state.reports.preview;
   const day = (report && report.finishedAt ? new Date(report.finishedAt) : new Date()).toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="monitor-preview-old-new-cusip-${day}.csv"`);
-  res.send(oldNewCusipCsv(report && report.items));
+  res.setHeader('Content-Disposition', `attachment; filename="monitor-preview-${day}.csv"`);
+  res.send(monitorReportCsv(report && report.items));
 });
 
 module.exports = router;
-module.exports.oldNewCusipCsv = oldNewCusipCsv;
+module.exports.monitorReportCsv = monitorReportCsv;
